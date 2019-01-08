@@ -35,29 +35,22 @@ void worker::stop()
     _isRuning.store(false);
 }
 
-void worker::go_final_success(request *req)
+void worker::go_final_success(request* req)
 {
-    req->body.buff = req->buff;
-    req->body.size = req->buf_size;
-    req->buff_free_after_close = false;
-
     req->state = request_state::write_response;
     req->wait_state = request_wait_state::wait_none;
-
     req->handler(req);
 }
 
-void worker::go_final_error(request *req, int code, const std::string &error)
+void worker::go_final_error(request* req, int code, const std::string& error)
 {
-    req->buff_free_after_close = true;
-
     req->resp.code = code;
     req->state = request_state::write_response;
     req->wait_state = request_wait_state::wait_none;
     std::cout << error << std::endl << std::flush;
 }
 
-void worker::go_next(request *req, const char *buff, size_t size)
+void worker::go_next(request* req, const char* buff, size_t size)
 {
     switch (req->state) {
     case request_state::read_line: {
@@ -75,6 +68,11 @@ void worker::go_next(request *req, const char *buff, size_t size)
             req->wait_state = request_wait_state::wait_sp;
             break;
         case request_line_state::read_uri:
+            if (size > 200) {
+                go_final_error(req, 414, "max uri size is 200");
+                return;
+            }
+
             req->line.uri.str = std::string(buff, size);
             req->line.state = request_line_state::read_version;
 
@@ -92,52 +90,38 @@ void worker::go_next(request *req, const char *buff, size_t size)
 
     case request_state::read_headers: {
         if (size > 0) {
-            // optimize: interested only in "Content-Length" header
-            const size_t key_size = 14;
-            if (size > key_size && strncasecmp(buff, "Content-Length", key_size) == 0) {
-                size_t value_pos = key_size + 1;
-                for (; value_pos<size; ++value_pos) {
-                    if (buff[value_pos] != 0x20 && buff[value_pos] != ':') {
-                        break;
-                    }
-                }
-                size_t value_size = size - value_pos;
-                if (value_size > 0) {
-                    int value = 0;
-                    bool was_converted = true;
-                    for (size_t i=value_pos; i<size; ++i) {
-                        if (buff[i] >= 0x30 && buff[i] <= 0x39) {
-                            value = value*10 + buff[i] - '0';
-                        } else {
-                            was_converted = false;
-                            break;
-                        }
-                    }
-
-                    if (was_converted) {
-                        req->body.body_size = static_cast<size_t>(value);
-                    } else {
-                        go_final_error(req, 400, "invalid content-length");
-                    }
+            auto [key, value] = parse_header(buff, size);
+            if (strncasecmp(key.data(), "Content-Length", key.size()) == 0) {
+                bool ok = false;
+                int64_t length = value.to_int(ok);
+                if (ok && length>=0) {
+                    req->body.wait_size = static_cast<size_t>(length);
+                } else {
+                    go_final_error(req, 400, "invalid content-length");
                 }
             } else {
-                auto pair = parse_header(buff, size);
-                if (!pair.first.empty()) {
-                    req->headers.map.insert(pair);
+                auto [key, value] = parse_header(buff, size);
+                if (!key.empty()) {
+                    req->headers.map.insert({
+                        std::string(key.data(), key.size()),
+                        std::string(value.data(), value.size())
+                    });
+                } else {
+                    go_final_error(req, 400, "invalid header format");
                 }
             }
         } else {
             switch (req->line.method) {
             case request_line_method::post:
-                if (req->body.body_size > 0) {
+                if (req->body.wait_size > 0) {
                     req->state = request_state::read_body;
                     req->wait_state = request_wait_state::wait_all;
                 } else {
-                    go_final_error(req, 400, "not found Content-Length for post method");
+                    go_final_error(req, 400, "not found Content-Length header for post method");
                 }
                 break;
             case request_line_method::get:
-                if (req->body.body_size == 0) {
+                if (req->body.wait_size == 0) {
                     go_final_success(req);
                 } else {
                     go_final_error(req, 400, "get can't contain body");
@@ -152,14 +136,18 @@ void worker::go_next(request *req, const char *buff, size_t size)
     }
 
     case request_state::read_body: {
-        if (request_helper::request_buff_append(req, buff, size)) {
-            req->body.write_size += size;
-        } else {
+        if (!request_helper::request_buff_append(req, buff, size)) {
             go_final_error(req, 500, "coundn't save body");
             return;
         }
 
-        if (req->body.write_size >= req->body.body_size) {
+        // TODO: if client send content-length more than really
+        // TODO: should body is followed by /r/n? If that is Ignore them.
+        if (req->buff_size >= req->body.wait_size) {
+            req->body.buff = req->buff;
+            req->body.buff_size = req->buff_size;
+            req->buff = nullptr;
+            req->buff_size = 0;
             go_final_success(req);
         }
         break;
@@ -172,7 +160,7 @@ void worker::go_next(request *req, const char *buff, size_t size)
     }
 }
 
-void worker::handle_in(request *req)
+void worker::handle_in(request* req)
 {
     if (req->state == request_state::write_response) {
         return;
@@ -221,8 +209,8 @@ void worker::handle_in(request *req)
             if (req->buff == nullptr) {
                 go_next(req, buff, size - sp_size);
             } else {
-                if (request_helper::request_buff_append(req, buff, size - sp_size)) {
-                    go_next(req, req->buff, req->buf_size);
+                if (request_helper::request_buff_append(req, buff, size)) {
+                    go_next(req, req->buff, req->buff_size - sp_size);
                 } else {
                     go_final_error(req, 500, "request buffer append");
                     break;
@@ -235,24 +223,30 @@ void worker::handle_in(request *req)
             req->got_cr = false;
             req->got_lf = false;
             req->need_process = false;
+
+            if (req->buff != nullptr) {
+                free(req->buff);
+                req->buff = nullptr;
+                req->buff_size = 0;
+            }
         }
     }
 
-    if (req->wait_state != request_wait_state::wait_none && current_pos+1 < read_size) {
-        char* buff = in_buff + current_pos;
-        size_t size = read_size - current_pos;
+    if (req->wait_state != request_wait_state::wait_none) {
+        if (current_pos < read_size) {
+            char* buff = in_buff + current_pos;
+            size_t size = read_size - current_pos;
 
-        if (req->wait_state == request_wait_state::wait_all) {
-            go_next(req, buff, size);
-        } else {
-            if (!request_helper::request_buff_append(req, buff, size)) {
+            if (req->wait_state == request_wait_state::wait_all) {
+                go_next(req, buff, size);
+            } else if (!request_helper::request_buff_append(req, buff, size)) {
                 go_final_error(req, 500, "buffer append to request");
             }
         }
     }
 }
 
-void worker::handle_out(request *req)
+void worker::handle_out(request* req)
 {
     if (req->state != request_state::write_response) {
         return;
@@ -291,11 +285,14 @@ void worker::handle_out(request *req)
 
         if (req->resp.body_write_size >= req->resp.body_size) {
             close(req->sock_d);
+            if (req->buff != nullptr) {
+                free(req->buff);
+            }
+            if (req->body.buff != nullptr) {
+                free(req->body.buff);
+            }
             if (req->resp.body != nullptr) {
                 free(req->resp.body);
-            }
-            if (req->buff_free_after_close) {
-                free(req->buff);
             }
             free(req);
         }
@@ -312,6 +309,7 @@ void worker::loop()
             if (event.events&EPOLLIN) {
                 handle_in(req);
                 if (req->state == request_state::write_response) {
+                    // TODO: free memory
                     epoll_event* event = reinterpret_cast<epoll_event*>(malloc(sizeof(epoll_event)));
                     if (!event) {
                         perror("allocate memory for epoll out event");
@@ -332,42 +330,17 @@ void worker::loop()
     }
 }
 
-std::pair<std::string, std::string> worker::parse_header(const char *buff, size_t size)
+std::pair<http::string, http::string> worker::parse_header(const char* buff, size_t size)
 {
-    std::pair<std::string, std::string> res;
+    http::string header(buff, size);
+    http::string key = header.cut_by(':');
 
-    size_t key_size = 0;
-    for (; key_size<size; ++key_size) {
-        if (buff[key_size] == 0x20 || buff[key_size] == ':') {
-            break;
-        }
-    }
+    key.trim();
+    header.trim();
 
-    if (key_size == 0) {
-        return res;
-    }
-
-    res.first = std::string(buff, key_size);
-
-    size_t value_pos = key_size + 1;
-    for (; value_pos<size; ++value_pos) {
-        if (buff[value_pos] != 0x20 && buff[value_pos] != ':') {
-            break;
-        }
-    }
-
-    size_t value_size = size - value_pos;
-    if (value_size <= 0) {
-        return res;
-    }
-
-    res.second = std::string(buff+value_pos, value_size);
+    std::pair<http::string, http::string> res;
+    res.first = key;
+    res.second = header;
 
     return res;
 }
-
-// TODO:
-//int worker::buff_to_int(const char *buff, size_t size)
-//{
-
-//}

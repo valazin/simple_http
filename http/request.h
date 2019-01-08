@@ -68,10 +68,9 @@ struct request_headers
 
 struct request_body
 {
-    size_t body_size = 0;
-    size_t write_size = 0;
     char* buff = nullptr;
-    size_t size = 0;
+    size_t buff_size = 0;
+    size_t wait_size = 0;
 };
 
 enum class request_state
@@ -95,8 +94,7 @@ struct request
     int sock_d = 0;
 
     char* buff = nullptr;
-    size_t buf_size = 0;
-    bool buff_free_after_close = true;
+    size_t buff_size = 0;
 
     bool got_sp = false;
     bool got_cr = false;
@@ -107,6 +105,8 @@ struct request
     request_headers headers;
     request_body body;
 
+    void* user_data = nullptr;
+
     response resp;
 
     request_state state = request_state::read_line;
@@ -116,10 +116,26 @@ struct request
     std::function<void(request*)> handler;
 };
 
-struct connection
-{
+//struct request_parser
+//{
+//    char* buff = nullptr;
+//    size_t buf_size = 0;
 
-};
+//    bool got_sp = false;
+//    bool got_cr = false;
+//    bool got_lf = false;
+//    bool need_process = false;
+
+//    request* request = nullptr;
+
+//    request_state state = request_state::read_line;
+//    request_wait_state wait_state = request_wait_state::wait_sp;
+//}
+
+//struct connection
+//{
+
+//};
 
 class request_helper
 {

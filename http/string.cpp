@@ -6,7 +6,7 @@ http::string::string()
 {
 }
 
-http::string::string(char *buff, size_t size) :
+http::string::string(const char *buff, size_t size) :
     _buff(buff),
     _size(size)
 {

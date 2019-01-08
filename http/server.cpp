@@ -125,6 +125,7 @@ void server::loop()
         req->handler = _handler;
         req->sock_d = conn_fd;
 
+        // TODO: free memory
         epoll_event* in_event = reinterpret_cast<epoll_event*>(malloc(sizeof(epoll_event)));
         in_event->events = EPOLLIN;
         in_event->data.ptr = req;

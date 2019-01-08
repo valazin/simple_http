@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdint>
 
 namespace http
 {
@@ -6,7 +7,7 @@ namespace http
 struct string
 {
     string();
-    string(char* buff, size_t size);
+    string(const char* buff, size_t size);
 
     bool empty() const;
     size_t size() const;
@@ -21,7 +22,7 @@ struct string
     int64_t to_int(bool& ok) const;
 
 private:
-    char* _buff = nullptr;
+    const char* _buff = nullptr;
     size_t _size = 0;
 };
 

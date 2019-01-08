@@ -1,6 +1,5 @@
 #include "request.h"
 
-#include <iostream>
 #include <cstring>
 
 using namespace http;
@@ -37,21 +36,22 @@ bool request_helper::request_buff_append(request* req, const char* buff, size_t 
 {
     if (req->buff == nullptr) {
         req->buff = reinterpret_cast<char*>(malloc(size));
-        if (!req->buff) {
-            std::cout << "couldn't allocate memory";
+        if (!(*buff)) {
             return false;
         }
+
         memcpy(req->buff, buff, size);
-        req->buf_size = size;
+        req->buff_size = size;
     } else {
-        char* new_buff = reinterpret_cast<char*>(realloc(req->buff, req->buf_size + size));
+        char* new_buff = reinterpret_cast<char*>(realloc(req->buff, req->buff_size + size));
         if (!new_buff) {
-            std::cout << "couldn't allocate memory";
             return false;
         }
-        memcpy(new_buff+req->buf_size, buff, size);
+
+        memcpy(new_buff+req->buff_size, buff, size);
+
         req->buff = new_buff;
-        req->buf_size += size;
+        req->buff_size += size;
     }
     return true;
 }

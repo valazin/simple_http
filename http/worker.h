@@ -7,6 +7,8 @@
 
 #include <sys/epoll.h>
 
+#include "string.h"
+
 namespace http
 {
 
@@ -30,8 +32,7 @@ private:
     void handle_out(request* req);
     void loop();
 
-    static std::pair<std::string, std::string> parse_header(const char* buff, size_t size);
-//    static int buff_to_int(const char* buff, size_t size);
+    static std::pair<http::string, http::string> parse_header(const char* buff, size_t size);
 
 private:
     int _epoll_d = -1;
