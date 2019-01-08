@@ -75,6 +75,9 @@ http::string http::string::cut_by(char ch)
         // plus 1 ignores ch
         _size -= res.size() + 1;
         _buff += res.size() + 1;
+    } else if (_size > 0 && _buff[0] == ch) {
+        --_size;
+        ++_buff;
     }
     return res;
 }

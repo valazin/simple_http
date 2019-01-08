@@ -39,7 +39,7 @@ void worker::go_final_success(request* req)
 {
     req->state = request_state::write_response;
     req->wait_state = request_wait_state::wait_none;
-    req->handler(req);
+    req->request_handler(req);
 }
 
 void worker::go_final_error(request* req, int code, const std::string& error)
@@ -50,12 +50,14 @@ void worker::go_final_error(request* req, int code, const std::string& error)
     std::cout << error << std::endl << std::flush;
 }
 
+// TODO: method for every state
 void worker::go_next(request* req, const char* buff, size_t size)
 {
+    // TODO: for every step we need to define max buff for safety from overflow
     switch (req->state) {
     case request_state::read_line: {
         switch (req->line.state) {
-        case request_line_state::read_method:
+        case request_line_state::read_method: {
             req->line.method = request_helper::str_to_request_method(buff, size);
 
             if (req->line.method == request_line_method::none) {
@@ -67,23 +69,41 @@ void worker::go_next(request* req, const char* buff, size_t size)
 
             req->wait_state = request_wait_state::wait_sp;
             break;
-        case request_line_state::read_uri:
+        }
+
+        case request_line_state::read_uri: {
             if (size > 200) {
                 go_final_error(req, 414, "max uri size is 200");
                 return;
             }
 
-            req->line.uri.str = std::string(buff, size);
+            handle_res res;
+            res.type = handle_res_type::ignore;
+            if (req->uri_handler) {
+                res = req->uri_handler(req, string(buff, size));
+            }
+
+            if (res.type == handle_res_type::ignore) {
+                req->line.uri.str = std::string(buff, size);
+            } else if (res.type == handle_res_type::error) {
+                go_final_error(req, res.code, res.desc);
+                return;
+            }
+
             req->line.state = request_line_state::read_version;
 
             req->wait_state = request_wait_state::wait_crlf;
+
             break;
-        case request_line_state::read_version:
+        }
+
+        case request_line_state::read_version: {
             req->line.version.str = std::string(buff, size);
 
             req->state = request_state::read_headers;
             req->wait_state = request_wait_state::wait_crlf;
             break;
+        }
         }
         break;
     }
@@ -91,7 +111,8 @@ void worker::go_next(request* req, const char* buff, size_t size)
     case request_state::read_headers: {
         if (size > 0) {
             auto [key, value] = parse_header(buff, size);
-            if (strncasecmp(key.data(), "Content-Length", key.size()) == 0) {
+            // TODO: also add content-length to common header list
+            if (key.size() == 14 && strncasecmp(key.data(), "Content-Length", key.size()) == 0) {
                 bool ok = false;
                 int64_t length = value.to_int(ok);
                 if (ok && length>=0) {
@@ -100,12 +121,21 @@ void worker::go_next(request* req, const char* buff, size_t size)
                     go_final_error(req, 400, "invalid content-length");
                 }
             } else {
-                auto [key, value] = parse_header(buff, size);
                 if (!key.empty()) {
-                    req->headers.map.insert({
-                        std::string(key.data(), key.size()),
-                        std::string(value.data(), value.size())
-                    });
+                    handle_res res;
+                    res.type = handle_res_type::ignore;
+                    if (req->header_handler) {
+                        res = req->header_handler(req, key, value);
+                    }
+
+                    if (res.type == handle_res_type::ignore) {
+                        req->headers.map.insert({
+                            std::string(key.data(), key.size()),
+                            std::string(value.data(), value.size())
+                        });
+                    } else if (res.type == handle_res_type::error) {
+                        go_final_error(req, res.code, res.desc);
+                    }
                 } else {
                     go_final_error(req, 400, "invalid header format");
                 }
@@ -145,7 +175,7 @@ void worker::go_next(request* req, const char* buff, size_t size)
         // TODO: should body is followed by /r/n? If that is Ignore them.
         if (req->buff_size >= req->body.wait_size) {
             req->body.buff = req->buff;
-            req->body.buff_size = req->buff_size;
+            req->body.buff_size = req->body.wait_size;
             req->buff = nullptr;
             req->buff_size = 0;
             go_final_success(req);
@@ -291,7 +321,7 @@ void worker::handle_out(request* req)
             if (req->body.buff != nullptr) {
                 free(req->body.buff);
             }
-            if (req->resp.body != nullptr) {
+            if (req->resp.free_body && req->resp.body != nullptr) {
                 free(req->resp.body);
             }
             free(req);

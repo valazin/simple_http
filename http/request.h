@@ -5,6 +5,8 @@
 #include <map>
 #include <functional>
 
+#include "string.h"
+
 namespace http
 {
 
@@ -25,6 +27,7 @@ struct response
     char* body = nullptr;
     size_t body_write_size = 0;
     size_t body_size = 0;
+    bool free_body = true;
 
     response_state state = response_state::write_line;
 };
@@ -89,6 +92,22 @@ enum class request_wait_state
     wait_none
 };
 
+enum class handle_res_type
+{
+    ignore,
+    success,
+    error
+};
+
+struct handle_res
+{
+    // use if success or error
+    int code = 0;
+    std::string desc;
+    handle_res_type type = handle_res_type::ignore;
+};
+
+
 struct request
 {
     int sock_d = 0;
@@ -105,15 +124,16 @@ struct request
     request_headers headers;
     request_body body;
 
-    void* user_data = nullptr;
-
-    response resp;
-
     request_state state = request_state::read_line;
     request_wait_state wait_state = request_wait_state::wait_sp;
 
     // FIXME:
-    std::function<void(request*)> handler;
+    response resp;
+
+    void* user_data = nullptr;
+    std::function<void(request*)> request_handler = nullptr;
+    std::function<handle_res(request*, http::string)> uri_handler = nullptr;
+    std::function<handle_res(request*, http::string, http::string)> header_handler = nullptr;
 };
 
 //struct request_parser

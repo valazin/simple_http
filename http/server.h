@@ -7,10 +7,12 @@
 #include <atomic>
 #include <functional>
 
+#include "string.h"
+#include "request.h"
+
 namespace http
 {
 
-class request;
 class worker;
 
 class server
@@ -21,7 +23,9 @@ public:
 
     bool start(const std::string& host,
                uint16_t port,
-               std::function<void(request* request)> handler);
+               std::function<void(request*)> request_handler,
+               std::function<handle_res(request*, http::string)> uri_handler,
+               std::function<handle_res(request*, http::string, http::string)> header_handler);
     void stop();
 
 private:
@@ -37,7 +41,9 @@ private:
     std::atomic<bool> _isRunning;
     std::thread _thread;
 
-    std::function<void(request* request)> _handler;
+    std::function<void(request* request)> _request_handler;
+    std::function<handle_res(request*, http::string)> _uri_handler;
+    std::function<handle_res(request*, http::string, http::string)> _header_handler;
 };
 
 }

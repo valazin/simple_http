@@ -1,3 +1,6 @@
+#ifndef STRING_H
+#define STRING_H
+
 #include <cstdio>
 #include <cstdint>
 
@@ -28,3 +31,4 @@ private:
 
 }
 
+#endif // STRING_H

@@ -4,8 +4,25 @@
 #include <sstream>
 #include <cstring>
 
-#include "http/request.h"
 #include "http/server.h"
+
+enum class hls_method
+{
+    undefined,
+    post_chunk,
+    get_chunk,
+    get_playlist
+};
+
+struct hls_context
+{
+    std::string hls_id;
+    int64_t seq = -1;
+    int64_t start_unix_timestamp = -1;
+    int64_t duration_msecs = -1;
+
+    hls_method method = hls_method::undefined;
+};
 
 struct chunk
 {
@@ -28,6 +45,8 @@ struct playlist
     size_t max_size = 20;
     size_t live_size = 5;
     std::deque<std::shared_ptr<chunk>> chunks;
+
+    std::mutex mtx;
 };
 
 application::application()
@@ -46,96 +65,195 @@ application::~application()
 
 void application::start()
 {
-    _server->start("10.110.3.43", 1024, std::bind(&application::handler, this, std::placeholders::_1));
+    const std::string host = "127.0.0.1";
+    const uint16_t port = 1024;
+
+    _hostname = host + ":" + std::to_string(port);
+
+    _server->start(host, port,
+                   std::bind(&application::handle_request, this, std::placeholders::_1),
+                   std::bind(&application::handle_uri, this, std::placeholders::_1, std::placeholders::_2),
+                   std::bind(&application::handle_header, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 }
 
-void application::handler(http::request *req)
+http::handle_res application::handle_uri(http::request* req, http::string uri)
+{
+    // TODO: free memory
+    hls_context* cxt = new hls_context;
+    if (!cxt) {
+        return {500, "couldn't allocate memory for hls context", http::handle_res_type::error};
+    }
+
+    uri.cut_by('/');
+
+    // http://hostname:port/hls/id
+    // http://hostname:port/hls/id/1
+
+    if (req->line.method == http::request_line_method::post) {
+        if (uri.size() == 5 && strncmp(uri.data(), "chunk", 5) == 0) {
+            cxt->method = hls_method::post_chunk;
+
+            req->user_data = cxt;
+
+            return {0, "", http::handle_res_type::success};
+        } else {
+            return {404, "not found supported method while parsing uri", http::handle_res_type::error};
+        }
+    } else if (req->line.method == http::request_line_method::get) {
+        http::string controller = uri.cut_by('/');
+        if (controller.size() != 3 || strncmp(controller.data(), "hls", controller.size()) != 0) {
+            return {404, "not found supported controller while parsing uri", http::handle_res_type::error};
+        }
+
+        http::string head = uri.cut_by('/');
+        if (!head.empty()) {
+            cxt->hls_id = std::string(head.data(), head.size());
+        } else if (!uri.empty()) {
+            cxt->hls_id = std::string(uri.data(), uri.size());
+            cxt->method = hls_method::get_playlist;
+
+            req->user_data = cxt;
+
+            return {0, "", http::handle_res_type::success};
+        } else {
+            return {404, "not found supported method for hls controller while parsing uri", http::handle_res_type::error};
+        }
+
+        head = uri.cut_by('/');
+        if (head.empty()) {
+            bool ok = false;
+            cxt->seq = uri.to_int(ok);
+            if (ok) {
+                cxt->method = hls_method::get_chunk;
+
+                req->user_data = cxt;
+
+                return {0, "", http::handle_res_type::success};
+            } else {
+                return {400, "couldn't fetch chunk seq while parsing uri", http::handle_res_type::error};
+            }
+        } else {
+            return {404, "uri is ubigutious", http::handle_res_type::error};
+        }
+    } else {
+        return {404, "unsupported http method", http::handle_res_type::error};
+    }
+}
+
+http::handle_res application::handle_header(http::request* req, http::string key, http::string value)
+{
+    if (req->line.method == http::request_line_method::post) {
+        hls_context* cxt = reinterpret_cast<hls_context*>(req->user_data);
+        if (!cxt) {
+            return {500, "couldn't get context while parsing header", http::handle_res_type::error};
+        }
+
+        // TODO: check header size or make compare method in http::stirng
+
+        if (cxt->hls_id.empty() && strncmp(key.data(), "X-HLS-ID", key.size()) == 0) {
+            cxt->hls_id = std::string(value.data(), value.size());
+            return {0, "", http::handle_res_type::success};
+        } else if (cxt->start_unix_timestamp == -1 && strncmp(key.data(), "X-HLS-TIMESTAMP", key.size()) == 0) {
+            bool ok = false;
+            cxt->start_unix_timestamp = value.to_int(ok);
+            if (ok) {
+                return {0, "", http::handle_res_type::success};
+            } else {
+                return {400, "couldn't fetch int from X-HLS-TIMESTAMP", http::handle_res_type::error};
+            }
+        } else if (cxt->duration_msecs == -1 && strncmp(key.data(), "X-HLS-DURATION", key.size()) == 0) {
+            bool ok = false;
+            cxt->duration_msecs = value.to_int(ok);
+            if (ok) {
+                return {0, "", http::handle_res_type::success};
+            } else {
+                return {400, "couldn't fetch int from X-HLS-DURATION", http::handle_res_type::error};
+            }
+        } else if (cxt->seq == -1 && strncmp(key.data(), "X-HLS-SEQ", key.size()) == 0) {
+            bool ok = false;
+            cxt->seq = value.to_int(ok);
+            if (ok) {
+                return {0, "", http::handle_res_type::success};
+            } else {
+                return {400, "couldn't fetch int from X-HLS-SEQ", http::handle_res_type::error};
+            }
+        } else {
+            return {0, "", http::handle_res_type::ignore};
+        }
+    } else {
+        return {0, "", http::handle_res_type::ignore};
+    }
+}
+
+void application::handle_request(http::request *req)
 {
     std::cout << "handle " << req->sock_d << std::endl << std::flush;
 
-    switch (req->line.method) {
-    case http::request_line_method::get:
-        handle_get(req);
-        break;
-    case http::request_line_method::post:
-        handle_post(req);
-        break;
-    case http::request_line_method::none:
+    hls_context* cxt = reinterpret_cast<hls_context*>(req->user_data);
+    if (!cxt) {
         req->resp.code = 500;
-        break;
+        return;
     }
-}
 
-void application::handle_get(http::request *req)
-{
-    bool found = false;
-
-    // FIXME: uncomment
-//    std::string id = fetch_str_header(req, "X-HLS-ID", found);
-//    if (!found) {
-//        req->resp.code = 400;
-//        return;
-//    }
-
-    std::string id = (*_playlists.begin()).first;
-
+    // TODO: use mutex for each playlist
     std::lock_guard<std::mutex> guard(_mtx);
-    if (get_playlist(id, req)) {
-        req->resp.code = 200;
-    } else {
+
+    switch(cxt->method) {
+    case hls_method::post_chunk: {
+        if (cxt->hls_id.empty()
+                || cxt->seq == -1
+                || cxt->start_unix_timestamp == -1
+                || cxt->duration_msecs == -1 ) {
+            req->resp.code = 400;
+            return;
+        }
+
+        auto cnk = std::make_shared<chunk>();
+        cnk->seq = cxt->seq;
+        cnk->start_unix_timestamp = cxt->start_unix_timestamp;
+        cnk->durationMsecs = cxt->duration_msecs;
+        if (post_chunk(cxt->hls_id, cnk)) {
+            req->resp.code = 200;
+
+            cnk->buff = req->body.buff;
+            cnk->size = req->body.buff_size;
+            req->body.buff = nullptr;
+            req->body.buff_size = 0;
+        } else {
+            req->resp.code = 500;
+        }
+        break;
+    }
+
+    case hls_method::get_chunk: {
+        if (get_chunk(cxt->hls_id, cxt->seq, req)) {
+            req->resp.code = 200;
+        } else {
+            req->resp.code = 500;
+        }
+        break;
+    }
+
+    case hls_method::get_playlist: {
+        if (get_playlist(cxt->hls_id, req)) {
+            req->resp.code = 200;
+        } else {
+            req->resp.code = 500;
+        }
+        break;
+    }
+
+    case hls_method::undefined: {
         req->resp.code = 500;
+        break;
+    }
     }
 }
 
-void application::handle_post(http::request *req)
-{
-    bool found = false;
-
-    std::string id = fetch_str_header(req, "X-HLS-ID", found);
-    if (!found) {
-        req->resp.code = 400;
-        return;
-    }
-
-    auto cnk = std::make_shared<chunk>();
-    cnk->start_unix_timestamp = fetch_int_header(req, "X-HLS-TIMESTAMP", found);
-    if (!found) {
-        req->resp.code = 400;
-        return;
-    }
-    cnk->durationMsecs = fetch_int_header(req, "X-HLS-DURATION", found);
-    if (!found) {
-        req->resp.code = 400;
-        return;
-    }
-    cnk->seq = fetch_int_header(req, "X-HLS-SEQ", found);
-    if (!found) {
-        req->resp.code = 400;
-        return;
-    }
-
-    std::lock_guard<std::mutex> guard(_mtx);
-    if (post_chunk(id, cnk)) {
-        req->resp.code = 200;
-
-        cnk->buff = req->body.buff;
-        cnk->size = req->body.size;
-
-        req->body.buff = nullptr;
-        req->body.size = 0;
-    } else {
-        req->resp.code = 500;
-    }
-
-    if (req->body.buff != nullptr) {
-        free(req->body.buff);
-    }
-}
-
-bool application::post_chunk(const std::string &plsId,
+bool application::post_chunk(const std::string &pls_id,
                             std::shared_ptr<chunk> cnk)
 {
-    std::cout << "post_chunk " << plsId << " "
+    std::cout << "post_chunk " << pls_id << " "
               << cnk->seq << " "
               << cnk->start_unix_timestamp << " "
               << cnk->durationMsecs
@@ -143,10 +261,10 @@ bool application::post_chunk(const std::string &plsId,
 
     playlist* plst = nullptr;
 
-    auto searched = _playlists.find(plsId);
+    auto searched = _playlists.find(pls_id);
     if (searched == _playlists.end()) {
         plst = new playlist;
-        _playlists.insert({plsId, plst});
+        _playlists.insert({pls_id, plst});
     } else {
         plst = searched->second;
     }
@@ -205,13 +323,41 @@ bool application::post_chunk(const std::string &plsId,
     return true;
 }
 
-bool application::get_playlist(const std::string &id, http::request *req)
+bool application::get_chunk(const std::string &pls_id, int64_t seq, http::request *req)
 {
-    std::cout << "get_playlist " << id << std::endl << std::flush;
+    std::cout << "get_chunk " << pls_id << " " << seq << std::endl << std::flush;
 
     playlist* plst = nullptr;
 
-    auto searched = _playlists.find(id);
+    auto searched = _playlists.find(pls_id);
+    if (searched == _playlists.end()) {
+        return false;
+    }
+    plst = searched->second;
+
+    if (!plst->chunks.empty()) {
+        for (auto&& cnk : plst->chunks) {
+            if (cnk->seq == seq) {
+                if (cnk->buff != nullptr) {
+                    req->resp.free_body = false;
+                    req->resp.body = cnk->buff;
+                    req->resp.body_size = cnk->size;
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool application::get_playlist(const std::string &pls_id, http::request *req)
+{
+    std::cout << "get_playlist " << pls_id << std::endl << std::flush;
+
+    playlist* plst = nullptr;
+
+    auto searched = _playlists.find(pls_id);
     if (searched == _playlists.end()) {
         return false;
     }
@@ -226,18 +372,18 @@ bool application::get_playlist(const std::string &id, http::request *req)
         i -= static_cast<int64_t>(plst->live_size);
     }
 
-    std::string data;
-    std::stringstream ss(data);
+    std::stringstream ss;
     ss << "#EXTM3U" << std::endl;
     ss << "#EXT-X-TARGETDURATION:2" << std::endl;
     ss << "#EXT-X-VERSION:4" << std::endl;
-    ss << "#EXT-X-MEDIA-SEQUENCE:" << (*i)->seq;
+    ss << "#EXT-X-MEDIA-SEQUENCE:" << (*i)->seq << std::endl;
     while (i != plst->chunks.end()) {
         auto cnk = (*i++);
         ss << "#EXTINF:" << ((cnk->durationMsecs / 1000) + 1) << "," << std::endl;
-        ss << id + "/" << cnk->seq << ".ts" << std::endl;
+        ss << chunk_url(pls_id, cnk) << std::endl;
     }
 
+    std::string data = ss.str();
     req->resp.body = reinterpret_cast<char*>(malloc(data.size()));
     if (req->resp.body == nullptr) {
         return false;
@@ -248,34 +394,7 @@ bool application::get_playlist(const std::string &id, http::request *req)
     return true;
 }
 
-std::string application::fetch_str_header(http::request *req,
-                                          const std::string &name,
-                                          bool& found)
+std::string application::chunk_url(const std::string &pls_id, std::shared_ptr<chunk> cnk) const
 {
-    auto search = req->headers.map.find(name);
-    if (search == req->headers.map.end()) {
-        found = false;
-        return std::string();
-    }
-
-    found = true;
-
-    return search->second;
-}
-
-int64_t application::fetch_int_header(http::request *req,
-                                      const std::string &name,
-                                      bool& found)
-{
-    int64_t res = 0;
-
-    auto search = req->headers.map.find(name);
-    if (search == req->headers.map.end()) {
-        found = false;
-        return res;
-    }
-
-    found = true;
-
-    return std::stoi(search->second);
+    return std::string(_hostname + "/" + pls_id + "/" + std::to_string(cnk->seq));
 }

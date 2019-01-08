@@ -9,7 +9,6 @@
 #include <vector>
 #include <thread>
 
-#include "request.h"
 #include "worker.h"
 
 using namespace http;
@@ -26,14 +25,18 @@ server::~server()
 
 bool server::start(const std::string &host,
                    uint16_t port,
-                   std::function<void(request* request)> handler)
+                   std::function<void(request* request)> request_handler,
+                   std::function<handle_res(request*, http::string)> uri_handler,
+                   std::function<handle_res(request*, http::string, http::string)> header_handler)
 {
     if (!init(host, port)) {
         uninit();
         return false;
     }
 
-    _handler = handler;
+    _request_handler = request_handler;
+    _uri_handler = uri_handler;
+    _header_handler = header_handler;
 
     _isRunning.store(true);
     _thread = std::thread(&server::loop, this);
@@ -122,7 +125,9 @@ void server::loop()
         }
 
         request* req = new request;
-        req->handler = _handler;
+        req->request_handler = _request_handler;
+        req->uri_handler = _uri_handler;
+        req->header_handler = _header_handler;
         req->sock_d = conn_fd;
 
         // TODO: free memory
