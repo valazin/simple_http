@@ -166,6 +166,8 @@ void worker::go_next(request* req, const char* buff, size_t size)
     }
 
     case request_state::read_body: {
+        // TODO: alloc big memory for buff to escape realloc
+        // We know content-length size and we can alloc for buff needed memory
         if (!request_helper::request_buff_append(req, buff, size)) {
             go_final_error(req, 500, "coundn't save body");
             return;
@@ -222,7 +224,7 @@ void worker::handle_in(request* req)
                     sp_size = 2;
                     req->need_process = true;
                 } else {
-                    // ERROR
+                    // TODO: go_final_error
                     req->got_cr = false;
                 }
             }
@@ -305,6 +307,7 @@ void worker::handle_out(request* req)
     if (req->resp.line_write_size >= req->resp.line.size()) {
         size_t lost = (req->resp.body_size - req->resp.body_write_size);
         if (lost > 0) {
+            // TODO: error when requesting from curl
             ssize_t written = write(req->sock_d, req->resp.body + req->resp.body_write_size, lost);
             if (written > 0) {
                 req->resp.body_write_size += static_cast<size_t>(written);

@@ -90,7 +90,7 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
     // http://hostname:port/hls/id/1
 
     if (req->line.method == http::request_line_method::post) {
-        if (uri.size() == 5 && strncmp(uri.data(), "chunk", 5) == 0) {
+        if (uri.size() == 5 && strncmp(uri.data(), "files", 5) == 0) {
             cxt->method = hls_method::post_chunk;
 
             req->user_data = cxt;
@@ -119,10 +119,11 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
             return {404, "not found supported method for hls controller while parsing uri", http::handle_res_type::error};
         }
 
-        head = uri.cut_by('/');
-        if (head.empty()) {
+        head = uri.cut_by('.');
+        // TODO: uri = '.ts'
+        if (!head.empty()) {
             bool ok = false;
-            cxt->seq = uri.to_int(ok);
+            cxt->seq = head.to_int(ok);
             if (ok) {
                 cxt->method = hls_method::get_chunk;
 
@@ -133,7 +134,7 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
                 return {400, "couldn't fetch chunk seq while parsing uri", http::handle_res_type::error};
             }
         } else {
-            return {404, "uri is ubigutious", http::handle_res_type::error};
+            return {404, "not found ts file", http::handle_res_type::error};
         }
     } else {
         return {404, "unsupported http method", http::handle_res_type::error};
@@ -194,9 +195,6 @@ void application::handle_request(http::request *req)
         req->resp.code = 500;
         return;
     }
-
-    // TODO: use mutex for each playlist
-    std::lock_guard<std::mutex> guard(_mtx);
 
     switch(cxt->method) {
     case hls_method::post_chunk: {
@@ -269,6 +267,8 @@ bool application::post_chunk(const std::string &pls_id,
         plst = searched->second;
     }
 
+    std::lock_guard<std::mutex> guard(plst->mtx);
+
     if (plst->chunks.empty()) {
         plst->chunks.push_back(cnk);
     } else {
@@ -335,6 +335,8 @@ bool application::get_chunk(const std::string &pls_id, int64_t seq, http::reques
     }
     plst = searched->second;
 
+    std::lock_guard<std::mutex> guard(plst->mtx);
+
     if (!plst->chunks.empty()) {
         for (auto&& cnk : plst->chunks) {
             if (cnk->seq == seq) {
@@ -363,13 +365,15 @@ bool application::get_playlist(const std::string &pls_id, http::request *req)
     }
     plst = searched->second;
 
+    std::lock_guard<std::mutex> guard(plst->mtx);
+
     if (plst->chunks.empty()) {
         return false;
     }
 
     auto i = plst->chunks.begin();
     if (plst->chunks.size() > plst->live_size) {
-        i -= static_cast<int64_t>(plst->live_size);
+        i = plst->chunks.end() - static_cast<int64_t>(plst->live_size);
     }
 
     std::stringstream ss;
@@ -396,5 +400,5 @@ bool application::get_playlist(const std::string &pls_id, http::request *req)
 
 std::string application::chunk_url(const std::string &pls_id, std::shared_ptr<chunk> cnk) const
 {
-    return std::string(_hostname + "/" + pls_id + "/" + std::to_string(cnk->seq));
+    return std::string("http://" + _hostname + "/hls/" + pls_id + "/" + std::to_string(cnk->seq) + ".ts");
 }

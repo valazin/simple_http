@@ -27,6 +27,7 @@ public:
     void start();
 
 private:
+    // TODO: add noexcept
     http::handle_res handle_uri(http::request* req, http::string uri);
     http::handle_res handle_header(http::request* req, http::string key, http::string value);
     void handle_request(http::request* req);
@@ -40,7 +41,6 @@ private:
 private:
     std::map<std::string, playlist*> _playlists;
     std::unique_ptr<http::server> _server;
-    std::mutex _mtx;
 
     std::string _hostname;
 };
