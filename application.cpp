@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <shared_mutex>
 
 #include "http/server.h"
 
@@ -46,7 +47,7 @@ struct playlist
     size_t live_size = 5;
     std::deque<std::shared_ptr<chunk>> chunks;
 
-    std::mutex mtx;
+    mutable std::shared_mutex mtx;
 };
 
 application::application()
@@ -65,7 +66,7 @@ application::~application()
 
 void application::start()
 {
-    const std::string host = "127.0.0.1";
+    const std::string host = "10.110.3.43";
     const uint16_t port = 1024;
 
     _hostname = host + ":" + std::to_string(port);
@@ -267,7 +268,9 @@ bool application::post_chunk(const std::string &pls_id,
         plst = searched->second;
     }
 
-    std::lock_guard<std::mutex> guard(plst->mtx);
+    std::unique_lock lock(plst->mtx);
+
+    // if cnk->seq = 0 then clear playlist
 
     if (plst->chunks.empty()) {
         plst->chunks.push_back(cnk);
@@ -299,8 +302,7 @@ bool application::post_chunk(const std::string &pls_id,
             // ignore
         } else if (back_gap >= 1) {
             // put after end
-            int64_t avaible = static_cast<int64_t>(plst->max_size - plst->chunks.size());
-            if (avaible > back_gap) {
+            if (static_cast<size_t>(back_gap) <= plst->live_size) {
                 // fill gap
                 for (int64_t i=0; i<back_gap-1; ++i) {
                     auto dummy = std::make_shared<chunk>();
@@ -308,6 +310,7 @@ bool application::post_chunk(const std::string &pls_id,
                     plst->chunks.push_back(dummy);
                 }
             } else {
+                std::cout << "WARNING: clear all: is coming big seq" << std::endl << std::flush;
                 plst->chunks.clear();
             }
 
@@ -335,7 +338,7 @@ bool application::get_chunk(const std::string &pls_id, int64_t seq, http::reques
     }
     plst = searched->second;
 
-    std::lock_guard<std::mutex> guard(plst->mtx);
+    std::shared_lock lock(plst->mtx);
 
     if (!plst->chunks.empty()) {
         for (auto&& cnk : plst->chunks) {
@@ -365,26 +368,31 @@ bool application::get_playlist(const std::string &pls_id, http::request *req)
     }
     plst = searched->second;
 
-    std::lock_guard<std::mutex> guard(plst->mtx);
+    std::shared_lock lock(plst->mtx);
 
     if (plst->chunks.empty()) {
         return false;
     }
 
-    auto i = plst->chunks.begin();
+    auto beg = plst->chunks.begin();
+    auto end = plst->chunks.end();
     if (plst->chunks.size() > plst->live_size) {
-        i = plst->chunks.end() - static_cast<int64_t>(plst->live_size);
+        beg = end - static_cast<int64_t>(plst->live_size);
     }
+
+    // TODO: calculate TARGETDURATION
+    // TODO: calculate EXTINF
 
     std::stringstream ss;
     ss << "#EXTM3U" << std::endl;
     ss << "#EXT-X-TARGETDURATION:2" << std::endl;
-    ss << "#EXT-X-VERSION:4" << std::endl;
-    ss << "#EXT-X-MEDIA-SEQUENCE:" << (*i)->seq << std::endl;
-    while (i != plst->chunks.end()) {
-        auto cnk = (*i++);
-        ss << "#EXTINF:" << ((cnk->durationMsecs / 1000) + 1) << "," << std::endl;
+    ss << "#EXT-X-VERSION:3" << std::endl;
+    ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
+    while (beg != plst->chunks.end()) {
+        auto cnk = (*beg);
+        ss << "#EXTINF:" << "2.000000," << std::endl;
         ss << chunk_url(pls_id, cnk) << std::endl;
+        ++beg;
     }
 
     std::string data = ss.str();
