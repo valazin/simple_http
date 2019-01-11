@@ -11,6 +11,8 @@ std::string request_helper::status_code_to_str(int code)
         return "OK";
     case 400:
         return "Bad Request";
+    case 404:
+        return "Not found";
     case 500:
         return "Internal Error";
     }

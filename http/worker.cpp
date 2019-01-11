@@ -86,7 +86,7 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
             if (res.type == handle_res_type::ignore) {
                 req->line.uri.str = std::string(buff, size);
             } else if (res.type == handle_res_type::error) {
-                go_final_error(req, res.code, res.desc);
+                go_final_error(req, res.code, "user handle error");
                 return;
             }
 
@@ -134,7 +134,7 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
                             std::string(value.data(), value.size())
                         });
                     } else if (res.type == handle_res_type::error) {
-                        go_final_error(req, res.code, res.desc);
+                        go_final_error(req, res.code, "user handle error");
                     }
                 } else {
                     go_final_error(req, 400, "invalid header format");

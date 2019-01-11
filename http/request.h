@@ -101,12 +101,10 @@ enum class handle_res_type
 
 struct handle_res
 {
-    // use if success or error
+    // use if error
     int code = 0;
-    std::string desc;
     handle_res_type type = handle_res_type::ignore;
 };
-
 
 struct request
 {

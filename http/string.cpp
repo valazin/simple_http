@@ -1,5 +1,7 @@
 #include "string.h"
 
+#include <cstring>
+
 using namespace http;
 
 http::string::string()
@@ -35,6 +37,15 @@ ssize_t http::string::find(char ch) const
         }
     }
     return -1;
+}
+
+int string::compare(const char *str) const
+{
+    size_t str_size = strlen(str);
+    if (_size != str_size) {
+        return static_cast<int>(_size) - static_cast<int>(str_size);
+    }
+    return strncmp(_buff, str, _size);
 }
 
 void http::string::trim()

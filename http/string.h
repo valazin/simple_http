@@ -17,6 +17,7 @@ struct string
     const char* data() const;
 
     ssize_t find(char ch) const;
+    int compare(const char *str) const;
 
     void trim();
     string sub_to(char ch) const;
