@@ -18,20 +18,20 @@ class worker;
 class server
 {
 public:
-    server();
+    server() noexcept;
     ~server();
 
     bool start(const std::string& host,
                uint16_t port,
                std::function<void(request*)> request_handler,
                std::function<handle_res(request*, http::string)> uri_handler,
-               std::function<handle_res(request*, http::string, http::string)> header_handler);
-    void stop();
+               std::function<handle_res(request*, http::string, http::string)> header_handler) noexcept;
+    void stop() noexcept;
 
 private:
-    bool init(const std::string& host, uint16_t port);
-    void uninit();
-    void loop();
+    bool init(const std::string& host, uint16_t port) noexcept;
+    void uninit() noexcept;
+    void loop() noexcept;
 
 private:
     int _sd = -1;

@@ -13,7 +13,7 @@
 
 using namespace http;
 
-server::server()
+server::server() noexcept
 {
     _isRunning.store(false);
 }
@@ -27,7 +27,7 @@ bool server::start(const std::string &host,
                    uint16_t port,
                    std::function<void(request* request)> request_handler,
                    std::function<handle_res(request*, http::string)> uri_handler,
-                   std::function<handle_res(request*, http::string, http::string)> header_handler)
+                   std::function<handle_res(request*, http::string, http::string)> header_handler) noexcept
 {
     if (!init(host, port)) {
         uninit();
@@ -44,7 +44,7 @@ bool server::start(const std::string &host,
     return true;
 }
 
-void server::stop()
+void server::stop() noexcept
 {
     // FIXME: uncomment after test
 //    _isRunning.store(false);
@@ -55,7 +55,7 @@ void server::stop()
     uninit();
 }
 
-bool server::init(const std::string &host, uint16_t port)
+bool server::init(const std::string &host, uint16_t port) noexcept
 {
     _sd = socket(AF_INET, SOCK_STREAM, 0);
     if (_sd == -1) {
@@ -102,7 +102,7 @@ bool server::init(const std::string &host, uint16_t port)
     return true;
 }
 
-void server::uninit()
+void server::uninit() noexcept
 {
     for (auto&& worker : _workers) {
         worker->stop();
@@ -114,7 +114,7 @@ void server::uninit()
     }
 }
 
-void server::loop()
+void server::loop() noexcept
 {
     size_t i = 0;
     while (_isRunning) {
@@ -130,12 +130,11 @@ void server::loop()
         req->header_handler = _header_handler;
         req->sock_d = conn_fd;
 
-        // TODO: free memory
-        epoll_event* in_event = reinterpret_cast<epoll_event*>(malloc(sizeof(epoll_event)));
-        in_event->events = EPOLLIN;
-        in_event->data.ptr = req;
+        epoll_event in_event;
+        in_event.events = EPOLLIN;
+        in_event.data.ptr = req;
 
-        if (epoll_ctl(_epolls.at(i), EPOLL_CTL_ADD, conn_fd, in_event) == -1) {
+        if (epoll_ctl(_epolls.at(i), EPOLL_CTL_ADD, conn_fd, &in_event) == -1) {
             perror("epoll_ctl");
         }
 

@@ -35,7 +35,7 @@ struct chunk
     }
 
     char* buff = nullptr;
-    size_t size;
+    size_t size = 0;
     int64_t seq = -1;
     int64_t start_unix_timestamp = 0;
     int64_t durationMsecs = 0;
@@ -45,12 +45,13 @@ struct playlist
 {
     size_t max_size = 20;
     size_t live_size = 5;
+    std::string cache_txt;
     std::deque<std::shared_ptr<chunk>> chunks;
 
     mutable std::shared_mutex mtx;
 };
 
-application::application()
+application::application() noexcept
 {
     _server = std::make_unique<http::server>();
 }
@@ -64,7 +65,9 @@ application::~application()
     }
 }
 
-void application::start()
+// TODO: one thread eat 100% cpu after client stop loading
+
+void application::start() noexcept
 {
     const std::string host = "10.110.3.43";
     const uint16_t port = 1024;
@@ -77,7 +80,7 @@ void application::start()
                    std::bind(&application::handle_header, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 }
 
-http::handle_res application::handle_uri(http::request* req, http::string uri)
+http::handle_res application::handle_uri(http::request* req, http::string uri) noexcept
 {
     // TODO: free memory
     hls_context* cxt = new hls_context;
@@ -98,11 +101,13 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
 
             return {0, "", http::handle_res_type::success};
         } else {
+            delete cxt;
             return {404, "not found supported method while parsing uri", http::handle_res_type::error};
         }
     } else if (req->line.method == http::request_line_method::get) {
         http::string controller = uri.cut_by('/');
         if (controller.size() != 3 || strncmp(controller.data(), "hls", controller.size()) != 0) {
+            delete cxt;
             return {404, "not found supported controller while parsing uri", http::handle_res_type::error};
         }
 
@@ -117,6 +122,7 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
 
             return {0, "", http::handle_res_type::success};
         } else {
+            delete cxt;
             return {404, "not found supported method for hls controller while parsing uri", http::handle_res_type::error};
         }
 
@@ -132,17 +138,20 @@ http::handle_res application::handle_uri(http::request* req, http::string uri)
 
                 return {0, "", http::handle_res_type::success};
             } else {
+                delete cxt;
                 return {400, "couldn't fetch chunk seq while parsing uri", http::handle_res_type::error};
             }
         } else {
+            delete cxt;
             return {404, "not found ts file", http::handle_res_type::error};
         }
     } else {
+        delete cxt;
         return {404, "unsupported http method", http::handle_res_type::error};
     }
 }
 
-http::handle_res application::handle_header(http::request* req, http::string key, http::string value)
+http::handle_res application::handle_header(http::request* req, http::string key, http::string value) noexcept
 {
     if (req->line.method == http::request_line_method::post) {
         hls_context* cxt = reinterpret_cast<hls_context*>(req->user_data);
@@ -161,6 +170,7 @@ http::handle_res application::handle_header(http::request* req, http::string key
             if (ok) {
                 return {0, "", http::handle_res_type::success};
             } else {
+                delete cxt;
                 return {400, "couldn't fetch int from X-HLS-TIMESTAMP", http::handle_res_type::error};
             }
         } else if (cxt->duration_msecs == -1 && strncmp(key.data(), "X-HLS-DURATION", key.size()) == 0) {
@@ -169,6 +179,7 @@ http::handle_res application::handle_header(http::request* req, http::string key
             if (ok) {
                 return {0, "", http::handle_res_type::success};
             } else {
+                delete cxt;
                 return {400, "couldn't fetch int from X-HLS-DURATION", http::handle_res_type::error};
             }
         } else if (cxt->seq == -1 && strncmp(key.data(), "X-HLS-SEQ", key.size()) == 0) {
@@ -177,6 +188,7 @@ http::handle_res application::handle_header(http::request* req, http::string key
             if (ok) {
                 return {0, "", http::handle_res_type::success};
             } else {
+                delete cxt;
                 return {400, "couldn't fetch int from X-HLS-SEQ", http::handle_res_type::error};
             }
         } else {
@@ -187,7 +199,7 @@ http::handle_res application::handle_header(http::request* req, http::string key
     }
 }
 
-void application::handle_request(http::request *req)
+void application::handle_request(http::request *req) noexcept
 {
     std::cout << "handle " << req->sock_d << std::endl << std::flush;
 
@@ -247,12 +259,13 @@ void application::handle_request(http::request *req)
         break;
     }
     }
+    delete cxt;
 }
 
-bool application::post_chunk(const std::string &pls_id,
-                            std::shared_ptr<chunk> cnk)
+bool application::post_chunk(const std::string &plst_id,
+                            std::shared_ptr<chunk> cnk) noexcept
 {
-    std::cout << "post_chunk " << pls_id << " "
+    std::cout << "post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_unix_timestamp << " "
               << cnk->durationMsecs
@@ -260,15 +273,13 @@ bool application::post_chunk(const std::string &pls_id,
 
     playlist* plst = nullptr;
 
-    auto searched = _playlists.find(pls_id);
+    auto searched = _playlists.find(plst_id);
     if (searched == _playlists.end()) {
         plst = new playlist;
-        _playlists.insert({pls_id, plst});
+        _playlists.insert({plst_id, plst});
     } else {
         plst = searched->second;
     }
-
-    std::unique_lock lock(plst->mtx);
 
     // if cnk->seq = 0 then clear playlist
 
@@ -323,10 +334,12 @@ bool application::post_chunk(const std::string &pls_id,
         }
     }
 
+    plst->cache_txt = build_playlist(plst_id, plst);
+
     return true;
 }
 
-bool application::get_chunk(const std::string &pls_id, int64_t seq, http::request *req)
+bool application::get_chunk(const std::string &pls_id, int64_t seq, http::request *req) noexcept
 {
     std::cout << "get_chunk " << pls_id << " " << seq << std::endl << std::flush;
 
@@ -356,7 +369,7 @@ bool application::get_chunk(const std::string &pls_id, int64_t seq, http::reques
     return false;
 }
 
-bool application::get_playlist(const std::string &pls_id, http::request *req)
+bool application::get_playlist(const std::string &pls_id, http::request *req) noexcept
 {
     std::cout << "get_playlist " << pls_id << std::endl << std::flush;
 
@@ -370,8 +383,17 @@ bool application::get_playlist(const std::string &pls_id, http::request *req)
 
     std::shared_lock lock(plst->mtx);
 
+    req->resp.body = plst->cache_txt.data();
+    req->resp.body_size = plst->cache_txt.size();
+    req->resp.free_body = false;
+
+    return true;
+}
+
+std::string application::build_playlist(const std::string& pls_id, playlist *plst) noexcept
+{
     if (plst->chunks.empty()) {
-        return false;
+        return std::string();
     }
 
     auto beg = plst->chunks.begin();
@@ -395,18 +417,10 @@ bool application::get_playlist(const std::string &pls_id, http::request *req)
         ++beg;
     }
 
-    std::string data = ss.str();
-    req->resp.body = reinterpret_cast<char*>(malloc(data.size()));
-    if (req->resp.body == nullptr) {
-        return false;
-    }
-    memcpy(req->resp.body, data.c_str(), data.size());
-    req->resp.body_size = data.size();
-
-    return true;
+    return ss.str();
 }
 
-std::string application::chunk_url(const std::string &pls_id, std::shared_ptr<chunk> cnk) const
+std::string application::chunk_url(const std::string &pls_id, std::shared_ptr<chunk> cnk) const noexcept
 {
     return std::string("http://" + _hostname + "/hls/" + pls_id + "/" + std::to_string(cnk->seq) + ".ts");
 }

@@ -158,12 +158,12 @@ struct request
 
 //};
 
-class request_helper
+struct request_helper
 {
-public:
     static std::string status_code_to_str(int code);
     static request_line_method str_to_request_method(const char* str, size_t size);
     static bool request_buff_append(request* req, const char* buff, size_t size);
+    static bool request_body_buff_append(request* req, const char* buff, size_t size);
 };
 
 }

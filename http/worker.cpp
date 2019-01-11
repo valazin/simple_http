@@ -11,7 +11,7 @@
 
 using namespace http;
 
-worker::worker(int epoll_d) :
+worker::worker(int epoll_d) noexcept :
     _epoll_d(epoll_d)
 {
     _isRuning.store(false);
@@ -24,25 +24,25 @@ worker::~worker()
     }
 }
 
-void worker::start()
+void worker::start() noexcept
 {
     _isRuning.store(true);
     _thread = std::thread(&worker::loop, this);
 }
 
-void worker::stop()
+void worker::stop() noexcept
 {
     _isRuning.store(false);
 }
 
-void worker::go_final_success(request* req)
+void worker::go_final_success(request* req) noexcept
 {
     req->state = request_state::write_response;
     req->wait_state = request_wait_state::wait_none;
     req->request_handler(req);
 }
 
-void worker::go_final_error(request* req, int code, const std::string& error)
+void worker::go_final_error(request* req, int code, const std::string& error) noexcept
 {
     req->resp.code = code;
     req->state = request_state::write_response;
@@ -51,7 +51,7 @@ void worker::go_final_error(request* req, int code, const std::string& error)
 }
 
 // TODO: method for every state
-void worker::go_next(request* req, const char* buff, size_t size)
+void worker::go_next(request* req, const char* buff, size_t size) noexcept
 {
     // TODO: for every step we need to define max buff for safety from overflow
     switch (req->state) {
@@ -166,20 +166,12 @@ void worker::go_next(request* req, const char* buff, size_t size)
     }
 
     case request_state::read_body: {
-        // TODO: alloc big memory for buff to escape realloc
-        // We know content-length size and we can alloc for buff needed memory
-        if (!request_helper::request_buff_append(req, buff, size)) {
+        if (!request_helper::request_body_buff_append(req, buff, size)) {
             go_final_error(req, 500, "coundn't save body");
             return;
         }
 
-        // TODO: if client send content-length more than really
-        // TODO: should body is followed by /r/n? If that is Ignore them.
-        if (req->buff_size >= req->body.wait_size) {
-            req->body.buff = req->buff;
-            req->body.buff_size = req->body.wait_size;
-            req->buff = nullptr;
-            req->buff_size = 0;
+        if (req->body.buff_size >= req->body.wait_size) {
             go_final_success(req);
         }
         break;
@@ -192,7 +184,7 @@ void worker::go_next(request* req, const char* buff, size_t size)
     }
 }
 
-void worker::handle_in(request* req)
+void worker::handle_in(request* req) noexcept
 {
     if (req->state == request_state::write_response) {
         return;
@@ -224,7 +216,7 @@ void worker::handle_in(request* req)
                     sp_size = 2;
                     req->need_process = true;
                 } else {
-                    // TODO: go_final_error
+                    // TODO: go_final_error. Ignore when parsing body
                     req->got_cr = false;
                 }
             }
@@ -256,10 +248,13 @@ void worker::handle_in(request* req)
             req->got_lf = false;
             req->need_process = false;
 
-            if (req->buff != nullptr) {
-                free(req->buff);
-                req->buff = nullptr;
-                req->buff_size = 0;
+            // If buffer is not needed
+            if (current_pos >= read_size) {
+                if (req->buff != nullptr) {
+                    free(req->buff);
+                    req->buff = nullptr;
+                    req->buff_size = 0;
+                }
             }
         }
     }
@@ -278,7 +273,7 @@ void worker::handle_in(request* req)
     }
 }
 
-void worker::handle_out(request* req)
+void worker::handle_out(request* req) noexcept
 {
     if (req->state != request_state::write_response) {
         return;
@@ -327,12 +322,12 @@ void worker::handle_out(request* req)
             if (req->resp.free_body && req->resp.body != nullptr) {
                 free(req->resp.body);
             }
-            free(req);
+            delete req;
         }
     }
 }
 
-void worker::loop()
+void worker::loop() noexcept
 {
     while (_isRuning) {
         int ready_desc = epoll_wait(_epoll_d, events, max_events, timeout_msecs);
@@ -342,15 +337,10 @@ void worker::loop()
             if (event.events&EPOLLIN) {
                 handle_in(req);
                 if (req->state == request_state::write_response) {
-                    // TODO: free memory
-                    epoll_event* event = reinterpret_cast<epoll_event*>(malloc(sizeof(epoll_event)));
-                    if (!event) {
-                        perror("allocate memory for epoll out event");
-                        continue;
-                    }
-                    event->events = EPOLLOUT;
-                    event->data.ptr = req;
-                    if (epoll_ctl(_epoll_d, EPOLL_CTL_MOD, req->sock_d, event) == -1) {
+                    epoll_event event;
+                    event.events = EPOLLOUT;
+                    event.data.ptr = req;
+                    if (epoll_ctl(_epoll_d, EPOLL_CTL_MOD, req->sock_d, &event) == -1) {
                         perror("epoll_ctl mod");
                     }
                 }
@@ -363,7 +353,7 @@ void worker::loop()
     }
 }
 
-std::pair<http::string, http::string> worker::parse_header(const char* buff, size_t size)
+std::pair<http::string, http::string> worker::parse_header(const char* buff, size_t size) noexcept
 {
     http::string header(buff, size);
     http::string key = header.cut_by(':');

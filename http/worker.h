@@ -17,22 +17,22 @@ struct request;
 class worker
 {
 public:
-    worker(int epoll_d);
+    worker(int epoll_d) noexcept;
     ~worker();
 
-    void start();
-    void stop();
+    void start() noexcept;
+    void stop() noexcept;
 
 private:
-    void go_final_success(request* req);
-    void go_final_error(request* req, int code, const std::string& error);
-    void go_next(request* req, const char* buff, size_t size);
+    void go_final_success(request* req) noexcept;
+    void go_final_error(request* req, int code, const std::string& error) noexcept;
+    void go_next(request* req, const char* buff, size_t size) noexcept;
 
-    void handle_in(request* req);
-    void handle_out(request* req);
-    void loop();
+    void handle_in(request* req) noexcept;
+    void handle_out(request* req) noexcept;
+    void loop() noexcept;
 
-    static std::pair<http::string, http::string> parse_header(const char* buff, size_t size);
+    static std::pair<http::string, http::string> parse_header(const char* buff, size_t size) noexcept;
 
 private:
     int _epoll_d = -1;

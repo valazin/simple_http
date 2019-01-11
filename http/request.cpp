@@ -55,3 +55,26 @@ bool request_helper::request_buff_append(request* req, const char* buff, size_t 
     }
     return true;
 }
+
+bool request_helper::request_body_buff_append(request *req, const char *buff, size_t size)
+{
+    if (req->body.buff == nullptr) {
+        req->body.buff = reinterpret_cast<char*>(malloc(req->body.wait_size));
+        if (!(*buff)) {
+            return false;
+        }
+    }
+
+   size_t lost = req->body.wait_size - req->body.buff_size;
+   if (size > lost) {
+       size = lost;
+   }
+
+    if (size > 0) {
+        memcpy(req->body.buff+req->body.buff_size, buff, size);
+        req->body.buff_size += size;
+        return true;
+    } else {
+        return false;
+    }
+}
