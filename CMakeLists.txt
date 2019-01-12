@@ -7,6 +7,7 @@ project(simple_http)
 add_executable(${PROJECT_NAME}
     "main.cpp"
     "http/string.cpp"
+    "http/uri.cpp"
     "http/request.cpp"
     "http/worker.cpp"
     "http/server.cpp"

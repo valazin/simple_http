@@ -10,7 +10,9 @@ uri::uri() noexcept
 
 // FIXME: /path?sta?rt=10&&&: onle one ?
 // FIXME: path///?start=10&&&duration=5: must starts with /
-uri::uri(char* buff, size_t size) noexcept
+uri::uri(const char* buff, size_t size) noexcept :
+    _buff(buff),
+    _size(size)
 {
     _is_valid = false;
 
@@ -71,4 +73,13 @@ std::vector<string> uri::get_path_items() const noexcept
 std::vector<query> uri::get_query_items() const noexcept
 {
     return _query_items;
+}
+
+std::string uri::to_str() const noexcept
+{
+    if (_is_valid) {
+        return std::string(_buff, _size);
+    } else {
+        return std::string();
+    }
 }
