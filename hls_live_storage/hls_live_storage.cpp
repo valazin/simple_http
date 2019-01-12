@@ -36,6 +36,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
         return false;
     }
 
+    // TODO: app map mutex. not important
     playlist* plst = find_or_create_playlist(plst_id);
     if (plst != nullptr) {
         _playlists.insert({plst_id, plst});
@@ -110,6 +111,7 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
 {
     std::cout << "get_chunk " << plst_id << " " << seq << std::endl << std::flush;
 
+    // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return nullptr;
@@ -129,6 +131,7 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
 {
     std::cout << "get_playlist " << plst_id << std::endl << std::flush;
 
+    // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return std::string();
@@ -140,7 +143,6 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
 
 playlist* hls_live_storage::find_playlist(const std::string &plst_id) const noexcept
 {
-    // TODO: app map mutex
     auto searched = _playlists.find(plst_id);
     if (searched == _playlists.end()) {
         return nullptr;
@@ -157,31 +159,35 @@ playlist *hls_live_storage::find_or_create_playlist(const std::string &plst_id) 
     return plst;
 }
 
-std::string hls_live_storage::build_playlist(const std::string &plst_id, playlist *plst) noexcept
+std::string hls_live_storage::build_playlist(const std::string &plst_id, playlist *plst) const noexcept
 {
     if (plst->chunks.empty()) {
         return std::string();
     }
 
     auto beg = plst->chunks.cbegin();
-    auto end = plst->chunks.cend();
     if (plst->chunks.size() > _live_size) {
-        beg = end - static_cast<int64_t>(_live_size);
+        beg = plst->chunks.cend() - static_cast<int64_t>(_live_size);
     }
 
-    // TODO: calculate TARGETDURATION
-    // TODO: calculate EXTINF
+    int64_t max_duration = 0;
+    for (auto i = beg; i<plst->chunks.cend(); ++i) {
+        const auto cnk = (*i);
+        if (cnk->duration_msecs > max_duration) {
+            max_duration = cnk->duration_msecs;
+        }
+    }
 
     std::stringstream ss;
     ss << "#EXTM3U" << std::endl;
-    ss << "#EXT-X-TARGETDURATION:2" << std::endl;
+    ss << "#EXT-X-TARGETDURATION:" << build_chunk_duration(max_duration) << std::endl;
     ss << "#EXT-X-VERSION:3" << std::endl;
     ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
-    while (beg != plst->chunks.end()) {
-        auto cnk = (*beg);
-        ss << "#EXTINF:" << "2.000000," << std::endl;
+
+    for (auto i = beg; i<plst->chunks.cend(); ++i) {
+        const auto cnk = (*i);
+        ss << "#EXTINF:" << build_chunk_duration(cnk->seq) << "," << std::endl;
         ss << build_chunk_url(plst_id, cnk) << std::endl;
-        ++beg;
     }
 
     return ss.str();
@@ -190,4 +196,11 @@ std::string hls_live_storage::build_playlist(const std::string &plst_id, playlis
 std::string hls_live_storage::build_chunk_url(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) const noexcept
 {
     return std::string("http://" + _hostname + "/hls/" + plst_id + "/" + std::to_string(cnk->seq) + ".ts");
+}
+
+std::string hls_live_storage::build_chunk_duration(int64_t duration_msecs) noexcept
+{
+    int64_t num = duration_msecs / 1000;
+    int64_t den = duration_msecs % 1000;
+    return std::to_string(num) + "." + std::to_string(den);
 }
