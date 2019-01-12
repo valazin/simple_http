@@ -36,21 +36,20 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
         return false;
     }
 
-    playlist* plst = find_playlist(plst_id);
-    if (plst == nullptr) {
-        plst = new playlist;
-        if (!plst) {
-            std::cerr << "couldn't allocate memory for playlist" << std::endl;
-            return false;
-        }
+    playlist* plst = find_or_create_playlist(plst_id);
+    if (plst != nullptr) {
         _playlists.insert({plst_id, plst});
+    } else {
+        return false;
     }
 
     std::unique_lock lock(plst->mtx);
 
-    // if cnk->seq = 0 then clear playlist
-
     if (plst->chunks.empty()) {
+        plst->chunks.push_back(cnk);
+    } else if (cnk->seq == 0) {
+        std::cout << "WARNING: clear all because seq 0";
+        plst->chunks.clear();
         plst->chunks.push_back(cnk);
     } else {
         auto last_cnk = plst->chunks.back();
@@ -78,6 +77,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
             }
         } else if (back_gap == 0) {
             // ignore
+            std::cout << "WARNING: ignore add becuase seq already exists" << std::endl << std::flush;
         } else if (back_gap >= 1) {
             // put after end
             if (static_cast<size_t>(back_gap) <= _live_size) {
@@ -88,7 +88,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
                     plst->chunks.push_back(dummy);
                 }
             } else {
-                std::cout << "WARNING: clear all: is coming big seq" << std::endl << std::flush;
+                std::cout << "WARNING: clear all because too big seq" << std::endl << std::flush;
                 plst->chunks.clear();
             }
 
@@ -148,14 +148,23 @@ playlist* hls_live_storage::find_playlist(const std::string &plst_id) const noex
     return searched->second;
 }
 
+playlist *hls_live_storage::find_or_create_playlist(const std::string &plst_id) const noexcept
+{
+    playlist* plst = find_playlist(plst_id);
+    if (plst == nullptr) {
+        plst = new playlist;
+    }
+    return plst;
+}
+
 std::string hls_live_storage::build_playlist(const std::string &plst_id, playlist *plst) noexcept
 {
     if (plst->chunks.empty()) {
         return std::string();
     }
 
-    auto beg = plst->chunks.begin();
-    auto end = plst->chunks.end();
+    auto beg = plst->chunks.cbegin();
+    auto end = plst->chunks.cend();
     if (plst->chunks.size() > _live_size) {
         beg = end - static_cast<int64_t>(_live_size);
     }

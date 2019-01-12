@@ -19,6 +19,7 @@ public:
 
 private:
     inline playlist* find_playlist(const std::string& plst_id) const noexcept;
+    inline playlist* find_or_create_playlist(const std::string& plst_id) const noexcept;
     inline std::string build_playlist(const std::string& plst_id, playlist* plst) noexcept;
     inline std::string build_chunk_url(const std::string& plst_id, const std::shared_ptr<chunk>& cnk) const noexcept;
 

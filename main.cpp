@@ -3,6 +3,8 @@
 
 // TODO: one thread eat 100% cpu after client stop loading
 // TODO: handling "client close connection" event
+// TODO: last read
+// TODO: clear by timer
 
 int main()
 {
