@@ -117,12 +117,9 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
 
     std::shared_lock lock(plst->mtx);
 
-    auto i = std::find_if(plst->chunks.begin(), plst->chunks.end(), [seq](auto&& cnk) {
-        return cnk->seq == seq;
-    });
-
-    if (i != plst->chunks.end()) {
-        return (*i);
+    if (seq >=0 && static_cast<size_t>(seq) < plst->chunks.size()) {
+        int64_t front_gap = seq - plst->chunks.front()->seq;
+        return *(plst->chunks.cbegin() + front_gap);
     }
 
     return nullptr;
@@ -143,7 +140,7 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
 
 playlist* hls_live_storage::find_playlist(const std::string &plst_id) const noexcept
 {
-    // todo: app map mutex
+    // TODO: app map mutex
     auto searched = _playlists.find(plst_id);
     if (searched == _playlists.end()) {
         return nullptr;

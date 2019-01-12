@@ -2,10 +2,11 @@
 #include "hls_live_storage/hls_live_storage.h"
 
 // TODO: one thread eat 100% cpu after client stop loading
+// TODO: handling "client close connection" event
 
 int main()
 {
-    const std::string host = "10.110.3.43";
+    const std::string host = "127.0.0.1";
     const uint16_t port = 1024;
     const std::string hostname = host + ":" + std::to_string(port);
 
