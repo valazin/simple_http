@@ -93,7 +93,37 @@ http::string http::string::cut_by(char ch)
     return res;
 }
 
-int64_t http::string::to_int(bool &ok) const
+std::vector<string> string::split(char ch) const
+{
+    std::vector<string> res;
+    if (_size <= 0) {
+        return res;
+    }
+
+    // stupid optimization for uri
+    res.reserve(10);
+
+    size_t pos = 0;
+    for (size_t i=0; i<_size; ++i) {
+        if (_buff[i] == ch) {
+            size_t size = i - pos;
+            if (size > 0) {
+                res.push_back(string(_buff + pos, size));
+                pos += size;
+            }
+            // ignore ch
+            ++pos;
+        }
+    }
+
+    if (!res.empty() && pos < _size) {
+        res.push_back(string(_buff + pos, _size - pos));
+    }
+
+    return res;
+}
+
+int64_t http::string::to_int(bool& ok) const
 {
     int64_t res = 0;
 

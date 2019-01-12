@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstdint>
+#include <vector>
 
 namespace http
 {
@@ -22,6 +23,7 @@ struct string
     void trim();
     string sub_to(char ch) const;
     string cut_by(char ch);
+    std::vector<string> split(char ch) const;
 
     int64_t to_int(bool& ok) const;
 
