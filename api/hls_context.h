@@ -15,7 +15,7 @@ struct hls_context
 {
     std::string hls_id;
     int64_t seq = -1;
-    int64_t start_unix_timestamp = -1;
+    int64_t start_ut_msecs = -1;
     int64_t duration_msecs = -1;
 
     hls_method method = hls_method::undefined;

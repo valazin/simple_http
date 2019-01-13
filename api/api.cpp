@@ -80,7 +80,7 @@ void api::handle_request(http::request *req) noexcept
     case hls_method::post_chunk: {
         auto cnk = std::make_shared<chunk>();
         cnk->seq = cxt->seq;
-        cnk->start_unix_timestamp = cxt->start_unix_timestamp;
+        cnk->start_ut_msecs = cxt->start_ut_msecs;
         cnk->duration_msecs = cxt->duration_msecs;
         if (_live_storage->add_chunk(cxt->hls_id, cnk)) {
             req->resp.code = 200;
@@ -210,9 +210,9 @@ http::handle_res api::fetch_hls_context_from_header(http::request_line_method me
     if (cxt->hls_id.empty() && key.compare("X-HLS-ID") == 0) {
         cxt->hls_id = std::string(value.data(), value.size());
         return {0,http::handle_res_type::success};
-    } else if (cxt->start_unix_timestamp == -1 && key.compare("X-HLS-TIMESTAMP") == 0) {
+    } else if (cxt->start_ut_msecs == -1 && key.compare("X-HLS-TIMESTAMP") == 0) {
         bool ok = false;
-        cxt->start_unix_timestamp = value.to_int(ok);
+        cxt->start_ut_msecs = value.to_int(ok);
         if (ok) {
             return {0, http::handle_res_type::success};
         } else {

@@ -15,23 +15,23 @@ struct playlist
 
 hls_live_storage::hls_live_storage(size_t live_size,
                                    size_t keep_size,
-                                   const std::string &hostname) :
+                                   const std::string &hostname) noexcept :
     _live_size(live_size),
     _keep_size(keep_size),
     _hostname(hostname)
 {
 }
 
-bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk)
+bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) noexcept
 {
     std::cout << "post_chunk " << plst_id << " "
               << cnk->seq << " "
-              << cnk->start_unix_timestamp << " "
+              << cnk->start_ut_msecs << " "
               << cnk->duration_msecs
               << std::endl << std::flush;
 
     if (cnk->seq == -1
-            || cnk->start_unix_timestamp == -1
+            || cnk->start_ut_msecs == -1
             || cnk->duration_msecs == -1 ) {
         return false;
     }

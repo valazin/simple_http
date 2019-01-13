@@ -15,7 +15,7 @@ struct chunk
     char* buff = nullptr;
     size_t size = 0;
     int64_t seq = -1;
-    int64_t start_unix_timestamp = 0;
+    int64_t start_ut_msecs = 0;
     int64_t duration_msecs = 0;
 };
 
