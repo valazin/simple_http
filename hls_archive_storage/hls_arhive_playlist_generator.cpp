@@ -39,17 +39,17 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     }
 
     for (size_t i=0; i<list.size(); ++i) {
-        const hls_chunk_info& current_info = list.at(i);
+        const hls_chunk_info& current = list.at(i);
         if (i > 0) {
-            const hls_chunk_info& prev_info = list.at(i-1);
-            long gapMsecs = current_info.start_ut_msecs - (prev_info.start_ut_msecs + prev_info.duration_msecs);
-            if (gapMsecs > 0) {
-                append_dummy_chunk(gapMsecs, stream);
+            const hls_chunk_info& prev = list.at(i-1);
+            long gap = current.start_ut_msecs - (prev.start_ut_msecs + prev.duration_msecs);
+            if (gap > 0) {
+                append_dummy_chunk(gap, stream);
             }
         }
 
-        const long duration = current_info.duration_msecs;
-        const std::string uri = _host_name + current_info.path;
+        const long duration = current.duration_msecs;
+        const std::string uri = _host_name + current.path;
 
         append_chunk(duration, uri, stream);
     }
@@ -70,7 +70,7 @@ void hls_arhive_playlist_generator::append_header(std::stringstream& stream) con
 {
     stream << "#EXTM3U" << std::endl;
     stream << "#EXT-X-VERSION:3" << std::endl;
-    // TODO: define max duraion in one place for stream muxer and stream generator
+    // TODO: define max duraion
     stream << "#EXT-X-TARGETDURATION:11" << std:: endl;
     stream << "#EXT-X-MEDIA-SEQUENCE:0" << std::endl;
 }
@@ -79,7 +79,6 @@ void hls_arhive_playlist_generator::append_chunk(int64_t msecs,
                                                  const std::string& uri,
                                                  std::stringstream& stream) const noexcept
 {
-    // TODO: use form live storage method
     stream << "#EXTINF:" << msecs/1000.0 << "," << std::endl;
     stream << uri << std::endl;
 }

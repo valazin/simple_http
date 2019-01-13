@@ -23,7 +23,6 @@ private:
 
     inline std::string build_playlist(const std::string& plst_id, playlist* plst) const noexcept;
     inline std::string build_chunk_url(const std::string& plst_id, const std::shared_ptr<chunk>& cnk) const noexcept;
-    inline static std::string build_chunk_duration(int64_t duration_msecs) noexcept;
 
 private:
     const size_t _live_size = 0;

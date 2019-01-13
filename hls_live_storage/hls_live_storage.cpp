@@ -180,13 +180,13 @@ std::string hls_live_storage::build_playlist(const std::string &plst_id, playlis
 
     std::stringstream ss;
     ss << "#EXTM3U" << std::endl;
-    ss << "#EXT-X-TARGETDURATION:" << build_chunk_duration(max_duration) << std::endl;
+    ss << "#EXT-X-TARGETDURATION:" << max_duration/1000.0 << std::endl;
     ss << "#EXT-X-VERSION:3" << std::endl;
     ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
 
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
         const auto cnk = (*i);
-        ss << "#EXTINF:" << build_chunk_duration(cnk->seq) << "," << std::endl;
+        ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
         ss << build_chunk_url(plst_id, cnk) << std::endl;
     }
 
@@ -196,11 +196,4 @@ std::string hls_live_storage::build_playlist(const std::string &plst_id, playlis
 std::string hls_live_storage::build_chunk_url(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) const noexcept
 {
     return std::string("http://" + _hostname + "/hls/" + plst_id + "/" + std::to_string(cnk->seq) + ".ts");
-}
-
-std::string hls_live_storage::build_chunk_duration(int64_t duration_msecs) noexcept
-{
-    int64_t num = duration_msecs / 1000;
-    int64_t den = duration_msecs % 1000;
-    return std::to_string(num) + "." + std::to_string(den);
 }

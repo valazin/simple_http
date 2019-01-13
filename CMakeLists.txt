@@ -11,7 +11,6 @@ add_executable(${PROJECT_NAME}
     "http/request.cpp"
     "http/worker.cpp"
     "http/server.cpp"
-    "http/http_protocol.cpp"
     "api/api.cpp"
     "api/hls_context.h"
     "hls/chunk.h"
