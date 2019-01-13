@@ -11,7 +11,7 @@
 #include "hls_chunk_info_repository.h"
 #include "hls_arhive_playlist_generator.h"
 
-hls_arhive_storage::hls_arhive_storage(const std::string& dir_path,
+hls_archive_storage::hls_archive_storage(const std::string& dir_path,
                                        const std::string &hostname,
                                        const std::string &mongo_uri,
                                        const std::vector<hls_chunk_info>& dummy_list) :
@@ -27,7 +27,7 @@ hls_arhive_storage::hls_arhive_storage(const std::string& dir_path,
     _playlist_generator = std::make_shared<hls_arhive_playlist_generator>(_host_name, dummy_list, _info_repository);
 }
 
-bool hls_arhive_storage::add_chunk(const std::string &hls_id, const std::shared_ptr<chunk> &cnk) noexcept
+bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared_ptr<chunk> &cnk) noexcept
 {
     std::time_t start_ut_secs = cnk->start_ut_msecs / 1000;
     struct std::tm* utc_date = gmtime(&start_ut_secs);
@@ -95,7 +95,7 @@ bool hls_arhive_storage::add_chunk(const std::string &hls_id, const std::shared_
     return false;
 }
 
-std::string hls_arhive_storage::get_playlist(const std::string &hls_id,
+std::string hls_archive_storage::get_playlist(const std::string &hls_id,
                                              int64_t start_ut_msecs,
                                              int64_t duration_msecs) const noexcept
 {

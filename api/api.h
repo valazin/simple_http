@@ -12,11 +12,12 @@ class server;
 }
 class hls_context;
 class hls_live_storage;
+class hls_archive_storage;
 
 class api
 {
 public:
-    api(hls_live_storage* live_storage);
+    api(hls_live_storage* live_storage, hls_archive_storage* archive_storage);
     ~api();
 
     void start(const std::string& host, uint16_t port) noexcept;
@@ -30,7 +31,8 @@ private:
     http::handle_res fetch_hls_context_from_header(http::request_line_method method, http::string key, http::string value, hls_context* cxt) const noexcept;
 
 private:
-    hls_live_storage* _live_storage;
+    hls_live_storage* _live_storage = nullptr;
+    hls_archive_storage* _archive_storage = nullptr;
     std::unique_ptr<http::server> _server;
 };
 

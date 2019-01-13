@@ -8,9 +8,11 @@
 #include "../http/server.h"
 #include "../hls/chunk.h"
 #include "../hls_live_storage/hls_live_storage.h"
+#include "../hls_archive_storage/hls_arhive_storage.h"
 
-api::api(hls_live_storage *live_storage)
-    : _live_storage(live_storage)
+api::api(hls_live_storage *live_storage, hls_archive_storage* archive_storage) :
+    _live_storage(live_storage),
+    _archive_storage(archive_storage)
 {
     _server = std::make_unique<http::server>();
 }
@@ -77,21 +79,32 @@ void api::handle_request(http::request *req) noexcept
 
     switch(cxt->method) {
     case hls_method::post_chunk: {
+
         auto cnk = std::make_shared<chunk>();
         cnk->seq = cxt->seq;
         cnk->start_ut_msecs = cxt->start_ut_msecs;
         cnk->duration_msecs = cxt->duration_msecs;
-        if (_live_storage->add_chunk(cxt->hls_id, cnk)) {
-            req->resp.code = 200;
 
-            cnk->buff = req->body.buff;
-            cnk->size = req->body.buff_size;
+        // TODO: how to handle error
 
-            req->body.buff = nullptr;
-            req->body.buff_size = 0;
-        } else {
-            req->resp.code = 500;
+        if (_live_storage) {
+            if (_live_storage->add_chunk(cxt->hls_id, cnk)) {
+                req->resp.code = 200;
+
+                cnk->buff = req->body.buff;
+                cnk->size = req->body.buff_size;
+
+                req->body.buff = nullptr;
+                req->body.buff_size = 0;
+            } else {
+                req->resp.code = 500;
+            }
         }
+
+        if (_archive_storage) {
+            _archive_storage->add_chunk(cxt->hls_id, cnk);
+        }
+
         break;
     }
 
@@ -122,10 +135,12 @@ void api::handle_request(http::request *req) noexcept
     }
 
     case hls_method::get_archive_chunk: {
+
         break;
     }
 
     case hls_method::get_archive_playlist: {
+
         break;
     }
 
@@ -171,6 +186,10 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
         cxt->hls_id = std::string(path_items[1].data(), path_items[1].size());
 
         if (path_items[2].compare("live") == 0) {
+            if (!_live_storage) {
+                return {http::handle_res_type::error, 404};
+            }
+
             http::string file = path_items[3];
             http::string name = file.cut_by('.');
             if (file.compare("ts") == 0) {
@@ -185,6 +204,10 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
                 return {http::handle_res_type::success};
             }
         } else if (path_items[2].compare("archive") == 0) {
+            if (!_archive_storage) {
+                return {http::handle_res_type::error, 404};
+            }
+
             if (path_items[3].compare("index.m3u8") == 0) {
                 cxt->method = hls_method::get_archive_playlist;
                 bool ok = false;

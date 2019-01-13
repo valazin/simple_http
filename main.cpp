@@ -20,9 +20,9 @@ int main()
     const std::string arhive_dir_path = "/tmp/hls";
     const std::string mongo_uri;
     std::vector<hls_chunk_info> dummy_list;
-    hls_arhive_storage* archive_storage = new hls_arhive_storage(arhive_dir_path, hostname, mongo_uri, dummy_list);
+    hls_archive_storage* archive_storage = new hls_archive_storage(arhive_dir_path, hostname, mongo_uri, dummy_list);
 
-    api a(live_storage);
+    api a(live_storage, archive_storage);
     a.start(host, port);
 
     return  0;

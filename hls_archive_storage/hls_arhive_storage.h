@@ -11,10 +11,10 @@
 class hls_chunk_info_repository;
 class hls_arhive_playlist_generator;
 
-class hls_arhive_storage
+class hls_archive_storage
 {
 public:
-    hls_arhive_storage(const std::string& dir_path,
+    hls_archive_storage(const std::string& dir_path,
                        const std::string& hostname,
                        const std::string& mongo_uri,
                        const std::vector<hls_chunk_info>& dummy_list);
