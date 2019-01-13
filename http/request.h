@@ -93,9 +93,9 @@ enum class handle_res_type
 
 struct handle_res
 {
+    handle_res_type type = handle_res_type::ignore;
     // use if error
     int code = 0;
-    handle_res_type type = handle_res_type::ignore;
 };
 
 struct request

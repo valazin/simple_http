@@ -144,3 +144,8 @@ int64_t http::string::to_int(bool& ok) const
 
     return res;
 }
+
+std::string string::to_str() const
+{
+    return std::string(_buff, _size);
+}

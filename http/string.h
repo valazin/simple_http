@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <vector>
+#include <string>
 
 namespace http
 {
@@ -26,6 +27,7 @@ struct string
     std::vector<string> split(char ch) const;
 
     int64_t to_int(bool& ok) const;
+    std::string to_str() const;
 
 private:
     const char* _buff = nullptr;

@@ -30,9 +30,9 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
               << cnk->duration_msecs
               << std::endl << std::flush;
 
-    if (cnk->seq == -1
-            || cnk->start_ut_msecs == -1
-            || cnk->duration_msecs == -1 ) {
+    if (cnk->seq < 0
+            || cnk->start_ut_msecs < 0
+            || cnk->duration_msecs <= 0 ) {
         return false;
     }
 

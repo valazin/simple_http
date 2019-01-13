@@ -46,7 +46,7 @@ bool server::start(const std::string &host,
 
 void server::stop() noexcept
 {
-    // FIXME: uncomment after test
+    // TODO: uncomment after test
 //    _isRunning.store(false);
     if (_thread.joinable()) {
         _thread.join();

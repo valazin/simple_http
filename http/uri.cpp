@@ -8,8 +8,8 @@ uri::uri() noexcept
 {
 }
 
-// FIXME: /path?sta?rt=10&&&: onle one ?
-// FIXME: path///?start=10&&&duration=5: must starts with /
+// TODO: /path?sta?rt=10&&&: onle one ?
+// TODO: path///?start=10&&&duration=5: must starts with /
 uri::uri(const char* buff, size_t size) noexcept :
     _buff(buff),
     _size(size)
@@ -73,6 +73,16 @@ std::vector<string> uri::get_path_items() const noexcept
 std::vector<query> uri::get_query_items() const noexcept
 {
     return _query_items;
+}
+
+string uri::find_query_item(const char* key) const noexcept
+{
+    for (auto&& item : _query_items) {
+        if (item.first.compare(key) == 0) {
+            return item.second;
+        }
+    }
+    return string();
 }
 
 std::string uri::to_str() const noexcept

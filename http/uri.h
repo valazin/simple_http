@@ -21,6 +21,8 @@ public:
     std::vector<string> get_path_items() const noexcept;
     std::vector<query> get_query_items() const noexcept;
 
+    string find_query_item(const char *key) const noexcept;
+
     std::string to_str() const noexcept;
 
 private:

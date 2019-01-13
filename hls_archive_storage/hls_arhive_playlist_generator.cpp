@@ -31,6 +31,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
         return stream.str();
     }
 
+    // fill front gap
     const hls_chunk_info& front = list.front();
     const long front_gap = front.start_ut_msecs - start_ut_msecs;
     if (front_gap > 0) {
@@ -54,12 +55,13 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
         append_chunk(duration, uri, stream);
     }
 
-        const hls_chunk_info& back = list.back();
-        const long back_gap = (start_ut_msecs+duration_msecs) - (back.start_ut_msecs+back.duration_msecs);
-        if (back_gap > 0) {
-            std::cout << "Back gap " << back_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
-            append_dummy_chunk(back_gap, stream);
-        }
+    // fill back gap
+    const hls_chunk_info& back = list.back();
+    const long back_gap = (start_ut_msecs+duration_msecs) - (back.start_ut_msecs+back.duration_msecs);
+    if (back_gap > 0) {
+        std::cout << "Back gap " << back_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
+        append_dummy_chunk(back_gap, stream);
+    }
 
     stream << "#EXT-X-ENDLIST";
 

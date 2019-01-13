@@ -7,8 +7,10 @@ enum class hls_method
 {
     undefined,
     post_chunk,
-    get_chunk,
-    get_playlist
+    get_live_chunk,
+    get_live_playlist,
+    get_archive_chunk,
+    get_archive_playlist
 };
 
 struct hls_context
@@ -17,6 +19,8 @@ struct hls_context
     int64_t seq = -1;
     int64_t start_ut_msecs = -1;
     int64_t duration_msecs = -1;
+
+    std::string path;
 
     hls_method method = hls_method::undefined;
 };
