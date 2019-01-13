@@ -10,13 +10,6 @@
 namespace http
 {
 
-enum class response_state
-{
-    write_line,
-    write_headers,
-    write_body
-};
-
 struct response
 {
     int code = 0;
@@ -28,8 +21,6 @@ struct response
     size_t body_write_size = 0;
     size_t body_size = 0;
     bool free_body = true;
-
-    response_state state = response_state::write_line;
 };
 
 enum class request_line_method
@@ -125,36 +116,14 @@ struct request
     request_state state = request_state::read_line;
     request_wait_state wait_state = request_wait_state::wait_sp;
 
-    // FIXME:
     response resp;
-
     void* user_data = nullptr;
+
     // TODO: test function perfmonce with function pointer
     std::function<void(request*)> request_handler = nullptr;
     std::function<handle_res(request*, http::string)> uri_handler = nullptr;
     std::function<handle_res(request*, http::string, http::string)> header_handler = nullptr;
 };
-
-//struct request_parser
-//{
-//    char* buff = nullptr;
-//    size_t buf_size = 0;
-
-//    bool got_sp = false;
-//    bool got_cr = false;
-//    bool got_lf = false;
-//    bool need_process = false;
-
-//    request* request = nullptr;
-
-//    request_state state = request_state::read_line;
-//    request_wait_state wait_state = request_wait_state::wait_sp;
-//}
-
-//struct connection
-//{
-
-//};
 
 struct request_helper
 {
