@@ -5,6 +5,7 @@
 #include <map>
 #include <functional>
 
+#include "uri.h"
 #include "string.h"
 
 namespace http
@@ -121,8 +122,8 @@ struct request
 
     // TODO: test function perfmonce with function pointer
     std::function<void(request*)> request_handler = nullptr;
-    std::function<handle_res(request*, http::string)> uri_handler = nullptr;
-    std::function<handle_res(request*, http::string, http::string)> header_handler = nullptr;
+    std::function<handle_res(request*, uri)> uri_handler = nullptr;
+    std::function<handle_res(request*, string, string)> header_handler = nullptr;
 };
 
 struct request_helper

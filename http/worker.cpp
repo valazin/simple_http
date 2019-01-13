@@ -80,7 +80,12 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
             handle_res res;
             res.type = handle_res_type::ignore;
             if (req->uri_handler) {
-                res = req->uri_handler(req, string(buff, size));
+                uri u(buff,size);
+                if (u.is_valid()) {
+                    res = req->uri_handler(req, u);
+                } else {
+                    go_final_error(req, 400, "bad uri");
+                }
             }
 
             if (res.type == handle_res_type::ignore) {

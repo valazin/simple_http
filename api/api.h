@@ -22,11 +22,11 @@ public:
     void start(const std::string& host, uint16_t port) noexcept;
 
 private:
-    http::handle_res handle_uri(http::request* req, http::string uri) noexcept;
+    http::handle_res handle_uri(http::request* req, http::uri uri) noexcept;
     http::handle_res handle_header(http::request* req, http::string key, http::string value) noexcept;
     void handle_request(http::request* req) noexcept;
 
-    http::handle_res fetch_hls_context_from_uri(http::request_line_method method, http::string uri, hls_context* cxt) const noexcept;
+    http::handle_res fetch_hls_context_from_uri(http::request_line_method method, http::uri uri, hls_context* cxt) const noexcept;
     http::handle_res fetch_hls_context_from_header(http::request_line_method method, http::string key, http::string value, hls_context* cxt) const noexcept;
 
 private:

@@ -24,7 +24,7 @@ public:
     bool start(const std::string& host,
                uint16_t port,
                std::function<void(request*)> request_handler,
-               std::function<handle_res(request*, http::string)> uri_handler,
+               std::function<handle_res(request*, http::uri)> uri_handler,
                std::function<handle_res(request*, http::string, http::string)> header_handler) noexcept;
     void stop() noexcept;
 
@@ -42,7 +42,7 @@ private:
     std::thread _thread;
 
     std::function<void(request* request)> _request_handler;
-    std::function<handle_res(request*, http::string)> _uri_handler;
+    std::function<handle_res(request*, http::uri)> _uri_handler;
     std::function<handle_res(request*, http::string, http::string)> _header_handler;
 };
 

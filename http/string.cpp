@@ -116,7 +116,7 @@ std::vector<string> string::split(char ch) const
         }
     }
 
-    if (!res.empty() && pos < _size) {
+    if (pos > 0 && pos < _size) {
         res.push_back(string(_buff + pos, _size - pos));
     }
 
