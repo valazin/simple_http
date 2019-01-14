@@ -211,7 +211,8 @@ void worker::handle_in(request* req) noexcept
         return;
     }
 
-    size_t sp_size = 0;
+    // ignore separators like sp, crlf
+    size_t ignore_size = 0;
 
     ssize_t s_read_size = read(req->sock_d, &in_buff, in_buff_size);
     if (s_read_size <= 0) {
@@ -219,25 +220,26 @@ void worker::handle_in(request* req) noexcept
     }
     size_t read_size = static_cast<size_t>(s_read_size);
 
-    size_t current_pos = 0;
-    for (size_t i=0; i<read_size; ++i) {
+    size_t head_pos = 0;
+    for (size_t current_pos=0; current_pos<read_size; ++current_pos) {
         if (req->wait_state == request_wait_state::wait_sp) {
-            if (in_buff[i] == 0x20) {
-                sp_size = 1;
+            if (in_buff[current_pos] == 0x20) {
+                ignore_size = 1;
                 req->need_process = true;
             }
         } else if (req->wait_state == request_wait_state::wait_crlf) {
             if (!req->got_cr) {
-                if (in_buff[i] == 0x0D) {
+                if (in_buff[current_pos] == 0x0D) {
                     req->got_cr = true;
                     continue;
                 }
             } else {
-                if (in_buff[i] == 0x0A) {
-                    sp_size = 2;
+                if (in_buff[current_pos] == 0x0A) {
+                    ignore_size = 2;
                     req->need_process = true;
                 } else {
-                    // TODO: go_final_error. Ignore when parsing body
+                    // TODO: go_final_error. Ignore when parsing body.
+                    // If we parse body we have wail_all state
                     req->got_cr = false;
                 }
             }
@@ -248,21 +250,23 @@ void worker::handle_in(request* req) noexcept
         }
 
         if (req->need_process) {
-            char* buff = in_buff + current_pos;
-            size_t size = (i - current_pos) + 1;
+            char* buff = in_buff + head_pos;
+            // +1 because pos starts with 0
+            size_t size = (current_pos - head_pos) + 1;
 
             if (req->buff == nullptr) {
-                go_next(req, buff, size - sp_size);
+                go_next(req, buff, size - ignore_size);
             } else {
+                // before process we must get a single buffer
                 if (request_helper::request_buff_append(req, buff, size)) {
-                    go_next(req, req->buff, req->buff_size - sp_size);
+                    go_next(req, req->buff, req->buff_size - ignore_size);
                 } else {
                     go_final_error(req, 500, "request buffer append");
                     break;
                 }
             }
 
-            current_pos += size;
+            head_pos += size;
 
             req->got_sp = false;
             req->got_cr = false;
@@ -270,7 +274,7 @@ void worker::handle_in(request* req) noexcept
             req->need_process = false;
 
             // If buffer is not needed
-            if (current_pos >= read_size) {
+            if (head_pos >= read_size) {
                 if (req->buff != nullptr) {
                     free(req->buff);
                     req->buff = nullptr;
@@ -281,9 +285,9 @@ void worker::handle_in(request* req) noexcept
     }
 
     if (req->wait_state != request_wait_state::wait_none) {
-        if (current_pos < read_size) {
-            char* buff = in_buff + current_pos;
-            size_t size = read_size - current_pos;
+        if (head_pos < read_size) {
+            char* buff = in_buff + head_pos;
+            size_t size = read_size - head_pos;
 
             if (req->wait_state == request_wait_state::wait_all) {
                 go_next(req, buff, size);
