@@ -119,7 +119,9 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
 
     std::shared_lock lock(plst->mtx);
 
-    if (seq >=0 && static_cast<size_t>(seq) < plst->chunks.size()) {
+    auto&& front = plst->chunks.front();
+    auto&& back = plst->chunks.back();
+    if (seq >= front->seq && seq <= back->seq) {
         int64_t front_gap = seq - plst->chunks.front()->seq;
         return *(plst->chunks.cbegin() + front_gap);
     }
@@ -195,7 +197,7 @@ std::string hls_live_storage::build_playlist(const std::string &plst_id, playlis
 
 std::string hls_live_storage::build_chunk_url(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) const noexcept
 {
-    return std::string("http://" + _hostname + "/hls/" + plst_id + "/" + std::to_string(cnk->seq) + ".ts");
+    return std::string("http://" + _hostname + "/hls/" + plst_id + "/live/" + std::to_string(cnk->seq) + ".ts");
 }
 
 std::string hls_live_storage::build_chunk_duration(int64_t duration_msecs) noexcept
