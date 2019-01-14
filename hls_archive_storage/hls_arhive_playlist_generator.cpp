@@ -1,7 +1,7 @@
 #include "hls_arhive_playlist_generator.h"
 
 #include <cassert>
-#include <iostream>
+#include <glog/logging.h>
 
 #include "hls_chunk_info_repository.h"
 
@@ -25,8 +25,8 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
 
     std::vector<hls_chunk_info> list = _info_repository->get_list(hls_id, start_ut_msecs, duration_msecs);
     if (list.empty()) {
-        std::cout << "Not found chunk for " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
-        std::cout << "Fill playlist with dummy chunks";
+        LOG(INFO) << "Not found chunk for " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
+        LOG(INFO) << "Fill playlist with dummy chunks";
         append_dummy_chunk(duration_msecs, stream);
         return stream.str();
     }
@@ -35,7 +35,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     const hls_chunk_info& front = list.front();
     const long front_gap = front.start_ut_msecs - start_ut_msecs;
     if (front_gap > 0) {
-        std::cout << "Front gap " << front_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
+        LOG(INFO) << "Front gap " << front_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
         append_dummy_chunk(front_gap, stream);
     }
 
@@ -59,7 +59,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     const hls_chunk_info& back = list.back();
     const long back_gap = (start_ut_msecs+duration_msecs) - (back.start_ut_msecs+back.duration_msecs);
     if (back_gap > 0) {
-        std::cout << "Back gap " << back_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
+        LOG(INFO) << "Back gap " << back_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
         append_dummy_chunk(back_gap, stream);
     }
 

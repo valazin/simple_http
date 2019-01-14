@@ -6,8 +6,9 @@
 
 #include <cstring>
 #include <cassert>
-#include <iostream>
 #include <sstream>
+
+#include <glog/logging.h>
 
 using namespace http;
 
@@ -35,6 +36,21 @@ void worker::stop() noexcept
     _isRuning.store(false);
 }
 
+void worker::release_request(request *req) noexcept
+{
+    close(req->sock_d);
+    if (req->buff != nullptr) {
+        free(req->buff);
+    }
+    if (req->body.buff != nullptr) {
+        free(req->body.buff);
+    }
+    if (req->resp.free_body && req->resp.body != nullptr) {
+        free(req->resp.body);
+    }
+    delete req;
+}
+
 void worker::go_final_success(request* req) noexcept
 {
     req->state = request_state::write_response;
@@ -47,7 +63,7 @@ void worker::go_final_error(request* req, int code, const std::string& error) no
     req->resp.code = code;
     req->state = request_state::write_response;
     req->wait_state = request_wait_state::wait_none;
-    std::cout << error << std::endl << std::flush;
+    LOG(INFO) << error;
 }
 
 // TODO: method for every state
@@ -299,35 +315,33 @@ void worker::handle_out(request* req) noexcept
         ssize_t written = write(req->sock_d, req->resp.line.c_str() + req->resp.line_write_size, lost);
         if (written > 0) {
             req->resp.line_write_size += static_cast<size_t>(written);
+            return;
+        } else if (written == -1 && errno == EAGAIN) {
+            return;
         } else {
             perror("write response line");
+            // TODO: close connection?
+            return;
         }
     }
 
     if (req->resp.line_write_size >= req->resp.line.size()) {
         size_t lost = (req->resp.body_size - req->resp.body_write_size);
         if (lost > 0) {
-            // TODO: error when requesting from curl
             ssize_t written = write(req->sock_d, req->resp.body + req->resp.body_write_size, lost);
             if (written > 0) {
                 req->resp.body_write_size += static_cast<size_t>(written);
+            } else if (written == -1 && errno == EAGAIN) {
+                return;
             } else {
                 perror("write response body");
+                // TODO: close connection?
+                return;
             }
         }
 
         if (req->resp.body_write_size >= req->resp.body_size) {
-            close(req->sock_d);
-            if (req->buff != nullptr) {
-                free(req->buff);
-            }
-            if (req->body.buff != nullptr) {
-                free(req->body.buff);
-            }
-            if (req->resp.free_body && req->resp.body != nullptr) {
-                free(req->resp.body);
-            }
-            delete req;
+            release_request(req);
         }
     }
 }
@@ -339,11 +353,13 @@ void worker::loop() noexcept
         for (int i = 0; i < ready_desc; ++i) {
             const epoll_event event = events[i];
             request* req = reinterpret_cast<request*>(event.data.ptr);
-            if (event.events&EPOLLIN) {
+            if (event.events&EPOLLRDHUP) {
+                release_request(req);
+            } else if (event.events&EPOLLIN) {
                 handle_in(req);
                 if (req->state == request_state::write_response) {
                     epoll_event event;
-                    event.events = EPOLLOUT;
+                    event.events = EPOLLOUT | EPOLLRDHUP;
                     event.data.ptr = req;
                     if (epoll_ctl(_epoll_d, EPOLL_CTL_MOD, req->sock_d, &event) == -1) {
                         perror("epoll_ctl mod");

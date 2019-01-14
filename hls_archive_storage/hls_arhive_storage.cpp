@@ -5,7 +5,6 @@
 #include <unistd.h>
 
 #include <ctime>
-#include <iostream>
 
 #include "../utility/filesystem.h"
 #include "hls_chunk_info_repository.h"

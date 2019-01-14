@@ -24,6 +24,8 @@ public:
     void stop() noexcept;
 
 private:
+    void release_request(request* req) noexcept;
+
     void go_final_success(request* req) noexcept;
     void go_final_error(request* req, int code, const std::string& error) noexcept;
     void go_next(request* req, const char* buff, size_t size) noexcept;

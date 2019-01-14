@@ -2,9 +2,10 @@
 
 #include <deque>
 #include <sstream>
-#include <iostream>
 #include <shared_mutex>
 #include <algorithm>
+
+#include <glog/logging.h>
 
 struct playlist
 {
@@ -24,11 +25,10 @@ hls_live_storage::hls_live_storage(size_t live_size,
 
 bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) noexcept
 {
-    std::cout << "post_chunk " << plst_id << " "
+    LOG(INFO) << "start post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_ut_msecs << " "
-              << cnk->duration_msecs
-              << std::endl << std::flush;
+              << cnk->duration_msecs;
 
     if (cnk->seq < 0
             || cnk->start_ut_msecs < 0
@@ -49,7 +49,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
     if (plst->chunks.empty()) {
         plst->chunks.push_back(cnk);
     } else if (cnk->seq == 0) {
-        std::cout << "WARNING: clear all because seq 0";
+        LOG(INFO) << "WARNING: clear all because seq 0";
         plst->chunks.clear();
         plst->chunks.push_back(cnk);
     } else {
@@ -78,7 +78,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
             }
         } else if (back_gap == 0) {
             // ignore
-            std::cout << "WARNING: ignore add becuase seq already exists" << std::endl << std::flush;
+            LOG(WARNING) << "ignore add becuase seq already exists";
         } else if (back_gap >= 1) {
             // put after end
             if (static_cast<size_t>(back_gap) <= _live_size) {
@@ -89,7 +89,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
                     plst->chunks.push_back(dummy);
                 }
             } else {
-                std::cout << "WARNING: clear all because too big seq" << std::endl << std::flush;
+                LOG(WARNING) << "clear all because too big seq";
                 plst->chunks.clear();
             }
 
@@ -104,12 +104,17 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
 
     plst->cache_txt = build_playlist(plst_id, plst);
 
+    LOG(INFO) << "stop post_chunk " << plst_id << " "
+              << cnk->seq << " "
+              << cnk->start_ut_msecs << " "
+              << cnk->duration_msecs;
+
     return true;
 }
 
 std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, int64_t seq) const noexcept
 {
-    std::cout << "get_chunk " << plst_id << " " << seq << std::endl << std::flush;
+    LOG(INFO) << "start get_chunk " << plst_id << " " << seq;
 
     // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
@@ -123,15 +128,17 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
     auto&& back = plst->chunks.back();
     if (seq >= front->seq && seq <= back->seq) {
         int64_t front_gap = seq - plst->chunks.front()->seq;
+        LOG(INFO) << "stop get_chunk " << plst_id << " " << seq;
         return *(plst->chunks.cbegin() + front_gap);
     }
 
+    LOG(INFO) << "fail stop get_chunk " << plst_id << " " << seq;
     return nullptr;
 }
 
 std::string hls_live_storage::get_playlist(const std::string &plst_id) const noexcept
 {
-    std::cout << "get_playlist " << plst_id << std::endl << std::flush;
+    LOG(INFO) << "start get_playlist " << plst_id;
 
     // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
@@ -140,6 +147,7 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
     }
 
     std::shared_lock lock(plst->mtx);
+    LOG(INFO) << "stop get_playlist " << plst_id;
     return plst->cache_txt;
 }
 

@@ -1,7 +1,7 @@
 #include "api.h"
 
 #include <cstring>
-#include <iostream>
+#include <glog/logging.h>
 
 #include "hls_context.h"
 #include "../utility/filesystem.h"
@@ -34,7 +34,7 @@ http::handle_res api::handle_uri(http::request *req, http::uri uri) noexcept
 {
     hls_context* cxt = new hls_context;
     if (cxt == nullptr) {
-        std::cerr << "FATAL error: couldn't allocate memory for hls context" << std::endl;
+        LOG(ERROR) << "FATAL error: couldn't allocate memory for hls context";
         return {http::handle_res_type::error, 500};
     }
 
@@ -56,7 +56,7 @@ http::handle_res api::handle_header(http::request *req,
     hls_context* cxt = reinterpret_cast<hls_context*>(req->user_data);
     if (!cxt) {
         delete cxt;
-        std::cerr << "FATAL error: couldn't fetch hls context from request" << std::endl;
+        LOG(ERROR) << "FATAL error: couldn't fetch hls context from request";
         return {http::handle_res_type::error, 500};
     }
 

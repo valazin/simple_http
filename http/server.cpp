@@ -5,9 +5,12 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <vector>
 #include <thread>
+
+#include <glog/logging.h>
 
 #include "worker.h"
 
@@ -124,6 +127,11 @@ void server::loop() noexcept
             continue;
         }
 
+        if (fcntl(conn_fd, F_SETFL, O_NONBLOCK) != 0) {
+            perror("fcntl to NONBLOCK");
+            continue;
+        }
+
         request* req = new request;
         req->request_handler = _request_handler;
         req->uri_handler = _uri_handler;
@@ -131,7 +139,7 @@ void server::loop() noexcept
         req->sock_d = conn_fd;
 
         epoll_event in_event;
-        in_event.events = EPOLLIN;
+        in_event.events = EPOLLIN | EPOLLRDHUP;
         in_event.data.ptr = req;
 
         if (epoll_ctl(_epolls.at(i), EPOLL_CTL_ADD, conn_fd, &in_event) == -1) {

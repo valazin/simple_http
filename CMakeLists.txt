@@ -22,4 +22,4 @@ add_executable(${PROJECT_NAME}
     "hls_archive_storage/hls_arhive_playlist_generator.cpp"
     )
 
-target_link_libraries(${PROJECT_NAME} "pthread")
+target_link_libraries(${PROJECT_NAME} "pthread" "glog")
