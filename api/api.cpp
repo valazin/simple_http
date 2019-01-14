@@ -125,9 +125,10 @@ void api::handle_request(http::request *req) noexcept
         std::string txt = _live_storage->get_playlist(cxt->hls_id);
         if (!txt.empty()) {
             req->resp.code = 200;
-            req->resp.body = txt.data();
+            req->resp.body = reinterpret_cast<char*>(malloc(txt.size()));
+            memcpy(req->resp.body, txt.data(), txt.size());
             req->resp.body_size = txt.size();
-            req->resp.free_body = false;
+//            req->resp.free_body = false;
         } else {
             req->resp.code = 500;
         }
@@ -166,7 +167,7 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
 
     switch (method) {
     case http::request_line_method::post: {
-        if (path_items.size() == 0) {
+        if (path_items.size() == 1) {
             if (path_items.at(0).compare("files") == 0) {
                 cxt->method = hls_method::post_chunk;
                 return {http::handle_res_type::success};
