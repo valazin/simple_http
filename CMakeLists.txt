@@ -18,8 +18,22 @@ add_executable(${PROJECT_NAME}
     "hls_live_storage/hls_live_storage.cpp"
     "hls_archive_storage/hls_arhive_storage.cpp"
     "hls_archive_storage/hls_chunk_info.h"
+    "hls_archive_storage/chunk_info_serializer.cpp"
     "hls_archive_storage/hls_chunk_info_repository.cpp"
     "hls_archive_storage/hls_arhive_playlist_generator.cpp"
     )
 
-target_link_libraries(${PROJECT_NAME} "pthread" "glog")
+target_include_directories(${PROJECT_NAME} PRIVATE
+    "/usr/include"
+    "/usr/include/mongocxx/v_noabi"
+    "/usr/include/bsoncxx/v_noabi"
+    )
+
+target_link_libraries(${PROJECT_NAME}
+    "pthread"
+    "glog"
+    "mongoc-1.0"
+    "bson-1.0"
+    "mongocxx"
+    "bsoncxx"
+    )

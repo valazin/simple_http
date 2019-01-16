@@ -1,14 +1,15 @@
 #include "worker.h"
 
-#include "request.h"
-
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
 
-#include <cstring>
 #include <cassert>
-#include <sstream>
 
 #include <glog/logging.h>
+
+#include "request.h"
+#include "../utility/filesystem.h"
 
 using namespace http;
 
@@ -45,10 +46,45 @@ void worker::release_request(request *req) noexcept
     if (req->body.buff != nullptr) {
         free(req->body.buff);
     }
-    if (req->resp.free_body && req->resp.body != nullptr) {
-        free(req->resp.body);
+    if (req->resp.free_cstr && req->resp.body_cstr != nullptr) {
+        free(req->resp.body_cstr);
+    }
+    if (req->resp.body_fd != -1) {
+        close(req->resp.body_fd);
     }
     delete req;
+}
+
+ssize_t worker::write_response_body(request* req) noexcept
+{
+    response& resp = req->resp;
+    size_t lost = (resp.body_size - resp.body_write_size);
+    if (lost <= 0) {
+        return 0;
+    }
+
+    ssize_t written = -1;
+    if (resp.body_cstr != nullptr) {
+        written = write(req->sock_d, resp.body_cstr + resp.body_write_size, lost);
+    } else if (!resp.body_str.empty()) {
+        written = write(req->sock_d, resp.body_str.data() + resp.body_write_size, lost);
+    } else if (!resp.body_file_path.empty()) {
+        written = sendfile(req->sock_d, resp.body_fd, &resp.body_file_offset, lost);
+    } else {
+        assert(1);
+    }
+
+    if (written > 0) {
+        resp.body_write_size += static_cast<size_t>(written);
+        return written;
+    } else if (written == -1 && errno == EAGAIN) {
+        written = 0;
+    } else {
+        perror("write response");
+        written = -1;
+    }
+
+    return written;
 }
 
 void worker::go_final_success(request* req) noexcept
@@ -304,49 +340,64 @@ void worker::handle_out(request* req) noexcept
         return;
     }
 
-    if (req->resp.line.empty()) {
+    response& resp = req->resp;
+
+    if (resp.line.empty()) {
+        // define body size for cxxstring or file
+        // cstr size must be defined by user
+
+        if (!resp.body_file_path.empty() && resp.body_fd == -1) {
+            resp.body_fd = open(resp.body_file_path.data(), O_RDONLY);
+            if (resp.body_fd == -1) {
+                perror("open file to write body");
+                release_request(req);
+                return;
+            }
+
+            ssize_t size = filesystem::file_size(resp.body_fd);
+            if (size != -1) {
+                resp.body_size = static_cast<size_t>(size);
+            } else {
+                release_request(req);
+                return;
+            }
+        } else if (!resp.body_str.empty()) {
+            resp.body_size = resp.body_str.size();
+        }
+
         std::stringstream ss;
-        ss << "HTTP/1.1 " << req->resp.code << " " << request_helper::status_code_to_str(req->resp.code) << "\r\n";
-        if (req->resp.body != nullptr) {
-            ss << "Content-Length: " << req->resp.body_size << "\r\n";
+        ss << "HTTP/1.1 " << resp.code << " " << request_helper::status_code_to_str(resp.code) << "\r\n";
+        if (resp.body_size > 0) {
+            ss << "Content-Length: " << resp.body_size << "\r\n";
         }
         ss << "\r\n";
-        req->resp.line = ss.str();
+        resp.line = ss.str();
     }
 
-    size_t lost = req->resp.line.size() - req->resp.line_write_size;
+    size_t lost = resp.line.size() - resp.line_write_size;
     if (lost > 0) {
-        ssize_t written = write(req->sock_d, req->resp.line.c_str() + req->resp.line_write_size, lost);
+        ssize_t written = write(req->sock_d, resp.line.c_str() + resp.line_write_size, lost);
         if (written > 0) {
-            req->resp.line_write_size += static_cast<size_t>(written);
+            resp.line_write_size += static_cast<size_t>(written);
             return;
         } else if (written == -1 && errno == EAGAIN) {
             return;
         } else {
             perror("write response line");
-            // TODO: close connection?
+            release_request(req);
             return;
         }
     }
 
-    if (req->resp.line_write_size >= req->resp.line.size()) {
-        size_t lost = (req->resp.body_size - req->resp.body_write_size);
-        if (lost > 0) {
-            ssize_t written = write(req->sock_d, req->resp.body + req->resp.body_write_size, lost);
-            if (written > 0) {
-                req->resp.body_write_size += static_cast<size_t>(written);
-            } else if (written == -1 && errno == EAGAIN) {
-                return;
-            } else {
-                perror("write response body");
-                // TODO: close connection?
-                return;
-            }
-        }
-
-        if (req->resp.body_write_size >= req->resp.body_size) {
+    if (resp.line_write_size >= resp.line.size()) {
+        if (write_response_body(req) == -1) {
             release_request(req);
+            return;
         }
+    }
+
+    if (resp.body_write_size >= resp.body_size) {
+        release_request(req);
     }
 }
 

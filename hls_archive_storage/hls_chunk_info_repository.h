@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <mongocxx/client.hpp>
 
 #include "hls_chunk_info.h"
 
@@ -13,8 +14,13 @@ public:
 
     bool add(const hls_chunk_info &info) noexcept;
     std::vector<hls_chunk_info> get_list(const std::string& hls_id,
-                                     int64_t start_ut_msecs,
-                                     int64_t duration_msecs) const noexcept;
+                                         int64_t start_ut_msecs,
+                                         int64_t duration_msecs) const;
+
+private:
+    mongocxx::client _dbClient;
+    mongocxx::database _streamsRecordsDatabase;
+    bool _isConnectedToDatabase = false;
 };
 
 #endif // CHUNK_INFO_REPOSITORY_H

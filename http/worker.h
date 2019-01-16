@@ -25,6 +25,7 @@ public:
 
 private:
     void release_request(request* req) noexcept;
+    ssize_t write_response_body(request* req) noexcept;
 
     void go_final_success(request* req) noexcept;
     void go_final_error(request* req, int code, const std::string& error) noexcept;

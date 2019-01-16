@@ -18,10 +18,20 @@ struct response
     std::string line;
     size_t line_write_size = 0;
 
-    char* body = nullptr;
-    size_t body_write_size = 0;
     size_t body_size = 0;
-    bool free_body = true;
+    size_t body_write_size = 0;
+
+    //
+    std::string body_str;
+
+    //
+    char* body_cstr = nullptr;
+    bool free_cstr = true;
+
+    //
+    int body_fd = -1;
+    std::string body_file_path;
+    off_t body_file_offset = 0;
 };
 
 enum class request_line_method

@@ -4,7 +4,6 @@
 #include <glog/logging.h>
 
 #include "hls_context.h"
-#include "../utility/filesystem.h"
 #include "../http/server.h"
 #include "../hls/chunk.h"
 #include "../hls_live_storage/hls_live_storage.h"
@@ -79,23 +78,21 @@ void api::handle_request(http::request *req) noexcept
 
     switch(cxt->method) {
     case hls_method::post_chunk: {
-
         auto cnk = std::make_shared<chunk>();
         cnk->seq = cxt->seq;
         cnk->start_ut_msecs = cxt->start_ut_msecs;
         cnk->duration_msecs = cxt->duration_msecs;
+        cnk->buff = req->body.buff;
+        cnk->size = req->body.buff_size;
 
-        // TODO: how to handle error
+        req->body.buff = nullptr;
+        req->body.buff_size = 0;
+
+        // TODO: how to handle error?
 
         if (_live_storage) {
             if (_live_storage->add_chunk(cxt->hls_id, cnk)) {
                 req->resp.code = 200;
-
-                cnk->buff = req->body.buff;
-                cnk->size = req->body.buff_size;
-
-                req->body.buff = nullptr;
-                req->body.buff_size = 0;
             } else {
                 req->resp.code = 500;
             }
@@ -112,9 +109,9 @@ void api::handle_request(http::request *req) noexcept
         auto cnk = _live_storage->get_chunk(cxt->hls_id, cxt->seq);
         if (cnk != nullptr) {
             req->resp.code = 200;
-            req->resp.body = cnk->buff;
+            req->resp.body_cstr = cnk->buff;
             req->resp.body_size = cnk->size;
-            req->resp.free_body = false;
+            req->resp.free_cstr = false;
         } else {
             req->resp.code = 404;
         }
@@ -125,10 +122,7 @@ void api::handle_request(http::request *req) noexcept
         std::string txt = _live_storage->get_playlist(cxt->hls_id);
         if (!txt.empty()) {
             req->resp.code = 200;
-            req->resp.body = reinterpret_cast<char*>(malloc(txt.size()));
-            memcpy(req->resp.body, txt.data(), txt.size());
-            req->resp.body_size = txt.size();
-//            req->resp.free_body = false;
+            req->resp.body_str = txt;
         } else {
             req->resp.code = 500;
         }
@@ -136,12 +130,24 @@ void api::handle_request(http::request *req) noexcept
     }
 
     case hls_method::get_archive_chunk: {
-
+        std::string path = _archive_storage->get_chunk_path(cxt->hls_id, cxt->path);
+        if (!path.empty()) {
+            req->resp.code = 200;
+            req->resp.body_file_path = path;
+        } else {
+            req->resp.code = 500;
+        }
         break;
     }
 
     case hls_method::get_archive_playlist: {
-
+        std::string txt = _archive_storage->get_playlist(cxt->hls_id, cxt->start_ut_msecs, cxt->duration_msecs);
+        if (!txt.empty()) {
+            req->resp.code = 200;
+            req->resp.body_str = txt;
+        } else {
+            req->resp.code = 500;
+        }
         break;
     }
 
@@ -177,7 +183,8 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
     }
 
     case http::request_line_method::get: {
-        if (path_items.size() < 4 || path_items.size() > 7) {
+        // TODO:
+        if (path_items.size() < 4 /*|| path_items.size() > 7*/) {
             break;
         }
 
@@ -252,33 +259,24 @@ http::handle_res api::fetch_hls_context_from_header(http::request_line_method me
         return {http::handle_res_type::ignore};
     }
 
+    auto str_to_int64 = [](http::string in, int64_t& out) -> http::handle_res {
+        bool ok = false;
+        out = in.to_int(ok);
+        if (ok) {
+            return {http::handle_res_type::success};
+        }
+        return {http::handle_res_type::error, 404};
+    };
+
     if (cxt->hls_id.empty() && key.compare("X-HLS-ID") == 0) {
         cxt->hls_id = std::string(value.data(), value.size());
         return {http::handle_res_type::success};
     } else if (cxt->start_ut_msecs == -1 && key.compare("X-HLS-TIMESTAMP") == 0) {
-        bool ok = false;
-        cxt->start_ut_msecs = value.to_int(ok);
-        if (ok) {
-            return {http::handle_res_type::success};
-        } else {
-            return {http::handle_res_type::error, 404};
-        }
+        return str_to_int64(value, cxt->start_ut_msecs);
     } else if (cxt->duration_msecs == -1 && key.compare("X-HLS-DURATION") == 0) {
-        bool ok = false;
-        cxt->duration_msecs = value.to_int(ok);
-        if (ok) {
-            return {http::handle_res_type::success};
-        } else {
-            return {http::handle_res_type::error, 404};
-        }
+        return str_to_int64(value, cxt->duration_msecs);
     } else if (cxt->seq == -1 && key.compare("X-HLS-SEQ") == 0) {
-        bool ok = false;
-        cxt->seq = value.to_int(ok);
-        if (ok) {
-            return {http::handle_res_type::success};
-        } else {
-            return {http::handle_res_type::error, 404};
-        }
+        return str_to_int64(value, cxt->seq);
     }
 
     return {http::handle_res_type::ignore};

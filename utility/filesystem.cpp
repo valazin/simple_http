@@ -3,6 +3,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+ssize_t filesystem::file_size(int fd)
+{
+    struct stat st;
+    if (fstat(fd, &st) != -1) {
+        return static_cast<ssize_t>(st.st_size);
+    }
+    return -1;
+}
+
 bool filesystem::dir_is_exist(const std::string& path)
 {
     struct stat st;
