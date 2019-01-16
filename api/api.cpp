@@ -174,7 +174,7 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
     switch (method) {
     case http::request_line_method::post: {
         if (path_items.size() == 1) {
-            if (path_items.at(0).compare("files") == 0) {
+            if (path_items[0].compare("files") == 0) {
                 cxt->method = hls_method::post_chunk;
                 return {http::handle_res_type::success};
             }

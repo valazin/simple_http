@@ -2,22 +2,30 @@
 #include "hls_live_storage/hls_live_storage.h"
 #include "hls_archive_storage/hls_arhive_storage.h"
 
+// bugs:
+// TODO: safe path to storage
+// TODO: htop says that only two thread works
+// TODO: for every hls a separate collection in mongo
 // TODO: one thread eat 100% cpu after client stop loading
 // TODO: error when requesting from curl
 // TODO: handling "client close connection" event
+// TODO: define max size for every state in http to safe from buffer overflow
+// TODO: shared pointer cbuff: chunk may be deleted while we are sending it through socket
+
+// optimization:
+// TODO: can we read/write until EAGAIN
+// TODO: for every request create buffer for escape copy
+
+// feature:
+// TODO: rest error code
+// TODO: dummy segments
 // TODO: last read
 // TODO: clear by timer
-// TODO: define max size for every state in http. safe from buffer overflow
-// TODO: for resp buff we must make a smart pointer: because chunk may be deleted while we are sending it through socket
-// TODO: how to return string without copy
-// TODO: can we read until EAGAIN
-// TODO: shared pointer cbuff
 // TODO: use location option for storage module
-
-#include <sys/sendfile.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <iostream>
+// TODO: config
+// TODO: logs
+// TODO: docker
+// TODO: timeline
 
 int main()
 {
@@ -31,7 +39,19 @@ int main()
 
     const std::string arhive_dir_path = "/tmp/hls";
     const std::string mongo_uri = "mongodb://10.110.3.43:27017";
+
     std::vector<hls_chunk_info> dummy_list;
+
+    hls_chunk_info dummy_10sec;
+    dummy_10sec.path = "/tmp/hls/dummy_10s.ts";
+    dummy_10sec.duration_msecs = 9960;
+    dummy_list.push_back(dummy_10sec);
+
+    hls_chunk_info dummy_1sec;
+    dummy_1sec.path = "/tmp/hls/dummy_1s.ts";
+    dummy_1sec.duration_msecs = 9960;
+    dummy_list.push_back(dummy_1sec);
+
     hls_archive_storage* archive_storage = new hls_archive_storage(arhive_dir_path, hostname, mongo_uri, dummy_list);
 
     api a(live_storage, archive_storage);
