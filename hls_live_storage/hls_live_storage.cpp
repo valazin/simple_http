@@ -25,7 +25,7 @@ hls_live_storage::hls_live_storage(size_t live_size,
 
 bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) noexcept
 {
-    LOG(INFO) << "start post_chunk " << plst_id << " "
+    LOG(INFO) << "start live post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_ut_msecs << " "
               << cnk->duration_msecs;
@@ -104,7 +104,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
 
     plst->cache_txt = build_playlist(plst_id, plst);
 
-    LOG(INFO) << "stop post_chunk " << plst_id << " "
+    LOG(INFO) << "stop live post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_ut_msecs << " "
               << cnk->duration_msecs;
@@ -114,7 +114,7 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
 
 std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, int64_t seq) const noexcept
 {
-    LOG(INFO) << "start get_chunk " << plst_id << " " << seq;
+    LOG(INFO) << "start live get_chunk " << plst_id << " " << seq;
 
     // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
@@ -128,17 +128,17 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
     auto&& back = plst->chunks.back();
     if (seq >= front->seq && seq <= back->seq) {
         int64_t front_gap = seq - plst->chunks.front()->seq;
-        LOG(INFO) << "stop get_chunk " << plst_id << " " << seq;
+        LOG(INFO) << "stop live get_chunk " << plst_id << " " << seq;
         return *(plst->chunks.cbegin() + front_gap);
     }
 
-    LOG(INFO) << "fail stop get_chunk " << plst_id << " " << seq;
+    LOG(INFO) << "fail stop live get_chunk " << plst_id << " " << seq;
     return nullptr;
 }
 
 std::string hls_live_storage::get_playlist(const std::string &plst_id) const noexcept
 {
-    LOG(INFO) << "start get_playlist " << plst_id;
+    LOG(INFO) << "start live get_playlist " << plst_id;
 
     // TODO: app map mutex. not important
     playlist* plst = find_playlist(plst_id);
@@ -147,7 +147,7 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
     }
 
     std::shared_lock lock(plst->mtx);
-    LOG(INFO) << "stop get_playlist " << plst_id;
+    LOG(INFO) << "stop live get_playlist " << plst_id;
     return plst->cache_txt;
 }
 

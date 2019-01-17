@@ -30,6 +30,11 @@ hls_archive_storage::hls_archive_storage(const std::string& dir_path,
 
 bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared_ptr<chunk> &cnk) noexcept
 {
+    LOG(INFO) << "start archive post_chunk " << hls_id << " "
+              << cnk->seq << " "
+              << cnk->start_ut_msecs << " "
+              << cnk->duration_msecs;
+
     std::time_t start_ut_secs = cnk->start_ut_msecs / 1000;
     struct std::tm* utc_date = gmtime(&start_ut_secs);
 
@@ -65,8 +70,11 @@ bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared
                   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
     if (fd != -1) {
+
+        // TODO: fwrite?
         ssize_t write_size = write(fd, cnk->buff, cnk->size);
         close(fd);
+
         if (write_size != -1) {
             if (static_cast<size_t>(write_size) < cnk->size) {
                 LOG(WARNING) << "not all data written to file";
@@ -82,8 +90,13 @@ bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared
             info.path = file_path;
 
             if (!_info_repository->add(info)) {
-                // TODO
+                // TODO: add to queue
             }
+
+            LOG(INFO) << "stop archive post_chunk " << hls_id << " "
+                      << cnk->seq << " "
+                      << cnk->start_ut_msecs << " "
+                      << cnk->duration_msecs;
 
             return true;
         } else {
@@ -106,5 +119,20 @@ std::string hls_archive_storage::get_playlist(const std::string &hls_id,
                                              int64_t start_ut_msecs,
                                              int64_t duration_msecs) const noexcept
 {
-    return _playlist_generator->generate(hls_id, start_ut_msecs, duration_msecs, "http://" + _host_name + "/hls/" + hls_id + "/archive");
+    LOG(INFO) << "start archive get playlist "
+              << hls_id
+              << " "
+              << start_ut_msecs
+              << " " << duration_msecs;
+
+    const std::string base_uri = "http://" + _host_name + "/hls/" + hls_id + "/archive";
+    std::string txt = _playlist_generator->generate(hls_id, start_ut_msecs, duration_msecs, base_uri);
+
+    LOG(INFO) << "stop archive get playlist "
+              << hls_id
+              << " "
+              << start_ut_msecs
+              << " " << duration_msecs;
+
+    return txt;
 }

@@ -4,6 +4,7 @@
 
 #include <mongocxx/uri.hpp>
 #include <mongocxx/instance.hpp>
+#include <mongocxx/client.hpp>
 #include <mongocxx/exception/server_error_code.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
 
@@ -13,49 +14,57 @@ using namespace bsoncxx::builder::basic;
 
 hls_chunk_info_repository::hls_chunk_info_repository(const std::string &mongo_uri)
 {
-//    // TODO: throw exception if connect to mongo was failed
     try {
         mongocxx::instance::current();
-        auto mongoUri = mongocxx::uri{mongo_uri};
-        _dbClient = mongocxx::client(mongoUri);
-        _streamsRecordsDatabase = _dbClient.database("HlsStorage");
-        _isConnectedToDatabase = true;
+        auto uri = mongocxx::uri{mongo_uri};
+        _pool = std::make_unique<mongocxx::pool>(uri);
     }
     catch (const mongocxx::v_noabi::operation_exception& e) {
         LOG(ERROR) << "DB connection error" << e.what();
-        _isConnectedToDatabase = false;
     }
 }
 
-bool hls_chunk_info_repository::add(const hls_chunk_info &info) noexcept
+bool hls_chunk_info_repository::add(const hls_chunk_info &info)
 {
-    if (!_streamsRecordsDatabase.has_collection(info.hls_id)) {
-        try {
-            _streamsRecordsDatabase.create_collection(info.hls_id);
+    LOG(INFO) << "start add info"
+              << info.hls_id << " "
+              << info.start_ut_msecs  << " "
+              << info.duration_msecs;
+
+    mongocxx::database db;
+    try {
+        auto client = _pool->acquire();
+        db = (*client)[_db_name];
+        if (!db.has_collection(info.hls_id)) {
+            db.create_collection(info.hls_id);
         }
-        catch (const mongocxx::operation_exception &exception) {
-            LOG(ERROR) << "Collection create error" << exception.what() << " " << exception.code();
-            // TODO: 48 has already created?
-            if (exception.code().value() == 48) {
-            } else {
-                return false;
-            }
-        }
-        catch (const mongocxx::exception &exception) {
-            LOG(ERROR) << "Collection create error" << exception.what();
+    } catch (const mongocxx::operation_exception &exception) {
+        LOG(ERROR) << "Collection create error" << exception.what() << " " << exception.code();
+        // TODO: 48 has already created?
+        if (exception.code().value() == 48) {
+        } else {
             return false;
         }
+    } catch (const std::exception &exception) {
+        LOG(ERROR) << "Collection create error" << exception.what();
+        return false;
     }
-
-    mongocxx::collection streamCollection = _streamsRecordsDatabase[info.hls_id];
-
-    auto segmentInfoDoc = chunk_info_serializer::serialize(info);
 
     try {
-        streamCollection.insert_one(std::move(segmentInfoDoc));
-    }
-    catch (const mongocxx::exception &exception) {
+        mongocxx::collection collection = db[info.hls_id];
+
+        auto doc = chunk_info_serializer::serialize(info);
+        collection.insert_one(std::move(doc));
+
+        LOG(INFO) << "stop add "
+                  << info.hls_id << " "
+                  << info.start_ut_msecs  << " "
+                  << info.duration_msecs;
+
+        return true;
+    } catch (const std::exception &exception) {
         LOG(ERROR) << "Insert segment info error" << exception.what();
+        return false;
     }
 }
 
@@ -63,14 +72,20 @@ std::vector<hls_chunk_info> hls_chunk_info_repository::get_list(const std::strin
                                                                 int64_t start_ut_msecs,
                                                                 int64_t duration_msecs) const
 {
+    LOG(INFO) << "start get playlist "
+              << hls_id << " "
+              << start_ut_msecs << " "
+              << duration_msecs;
+
     std::vector<hls_chunk_info> result;
-
-    if (!_streamsRecordsDatabase.has_collection(hls_id)) {
-        return result;
-    }
-
     try {
-        mongocxx::collection streamCollection = _streamsRecordsDatabase[hls_id];
+        auto client = _pool->acquire();
+        mongocxx::database db = (*client)[_db_name];
+
+        if (!db.has_collection(hls_id)) {
+            return result;
+        }
+        mongocxx::collection collection = db[hls_id];
 
         mongocxx::pipeline pipeline{};
         pipeline.match(make_document(
@@ -82,15 +97,20 @@ std::vector<hls_chunk_info> hls_chunk_info_repository::get_list(const std::strin
                                    ))
                            ));
         pipeline.sort(make_document(kvp("StartUnixTimestamp", 1)));
-        mongocxx::cursor cursor = streamCollection.aggregate(pipeline);
+        mongocxx::cursor cursor = collection.aggregate(pipeline);
         for(const bsoncxx::document::view& doc : cursor) {
             hls_chunk_info info = chunk_info_serializer::deserialize(doc);
             result.push_back(info);
         }
-    }
-    catch (const mongocxx::exception &exception) {
+    } catch (const std::exception &exception) {
         LOG(ERROR) << "Find collection error " << exception.what();
+        return result;
     }
+
+    LOG(INFO) << "stop get playlist "
+              << hls_id << " "
+              << start_ut_msecs << " "
+              << duration_msecs;
 
     return result;
 }

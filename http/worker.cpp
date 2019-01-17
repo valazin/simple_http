@@ -244,6 +244,7 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
 void worker::handle_in(request* req) noexcept
 {
     if (req->state == request_state::write_response) {
+        // TODO: is request are coming here
         return;
     }
 
@@ -406,7 +407,7 @@ void worker::loop() noexcept
     while (_isRuning) {
         int ready_desc = epoll_wait(_epoll_d, events, max_events, timeout_msecs);
         for (int i = 0; i < ready_desc; ++i) {
-            const epoll_event event = events[i];
+            const epoll_event& event = events[i];
             request* req = reinterpret_cast<request*>(event.data.ptr);
             if (event.events&EPOLLRDHUP) {
                 release_request(req);
