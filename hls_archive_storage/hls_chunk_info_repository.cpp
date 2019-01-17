@@ -32,8 +32,9 @@ bool hls_chunk_info_repository::add(const hls_chunk_info &info)
               << info.duration_msecs;
 
     mongocxx::database db;
+    auto client = _pool->acquire();
+
     try {
-        auto client = _pool->acquire();
         db = (*client)[_db_name];
         if (!db.has_collection(info.hls_id)) {
             db.create_collection(info.hls_id);
@@ -78,6 +79,7 @@ std::vector<hls_chunk_info> hls_chunk_info_repository::get_list(const std::strin
               << duration_msecs;
 
     std::vector<hls_chunk_info> result;
+
     try {
         auto client = _pool->acquire();
         mongocxx::database db = (*client)[_db_name];
