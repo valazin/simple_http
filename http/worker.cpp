@@ -211,30 +211,46 @@ void worker::handle_in(request* req) noexcept
         return;
     }
 
-    // ignore separators like sp, crlf
+    // size separators like sp(space), crlf(\r\n)
     size_t ignore_size = 0;
 
-    ssize_t s_read_size = read(req->sock_d, &in_buff, in_buff_size);
+    // TODO we can allocate for reqeust meta info in constructor without dynamic alloc
+    if (req->buff == nullptr) {
+        req->buff = new char[2048];
+        if (req->buff == nullptr) {
+            // couldn't allocate memory
+        }
+        req->buff_size = 2048;
+    }
+
+    ssize_t avaible_size = static_cast<ssize_t>(req->buff_size) - static_cast<ssize_t>(req->buff_written_size);
+    if (avaible_size <= 0) {
+        go_final_error(req, 400, "too big request");
+        return;
+    }
+
+    size_t current_pos = req->buff_written_size;
+    ssize_t s_read_size = read(req->sock_d, req->buff + current_pos, static_cast<size_t>(avaible_size));
     if (s_read_size <= 0) {
         return;
     }
     size_t read_size = static_cast<size_t>(s_read_size);
+    req->buff_written_size += read_size;
 
-    size_t head_pos = 0;
-    for (size_t current_pos=0; current_pos<read_size; ++current_pos) {
+    for (; current_pos<req->buff_written_size; ++current_pos) {
         if (req->wait_state == request_wait_state::wait_sp) {
-            if (in_buff[current_pos] == 0x20) {
+            if (req->buff[current_pos] == 0x20) {
                 ignore_size = 1;
                 req->need_process = true;
             }
         } else if (req->wait_state == request_wait_state::wait_crlf) {
             if (!req->got_cr) {
-                if (in_buff[current_pos] == 0x0D) {
+                if (req->buff[current_pos] == 0x0D) {
                     req->got_cr = true;
                     continue;
                 }
             } else {
-                if (in_buff[current_pos] == 0x0A) {
+                if (req->buff[current_pos] == 0x0A) {
                     ignore_size = 2;
                     req->need_process = true;
                 } else {
@@ -250,52 +266,38 @@ void worker::handle_in(request* req) noexcept
         }
 
         if (req->need_process) {
-            char* buff = in_buff + head_pos;
-            // +1 because pos starts with 0
-            size_t size = (current_pos - head_pos) + 1;
+            char* buff = req->buff + req->buff_head;
+            // +1 because all positions start with 0
+            size_t size = (current_pos - req->buff_head) + 1;
 
-            if (req->buff == nullptr) {
-                go_next(req, buff, size - ignore_size);
-            } else {
-                // before process we must get a single buffer
-                if (request_helper::request_buff_append(req, buff, size)) {
-                    go_next(req, req->buff, req->buff_size - ignore_size);
-                } else {
-                    go_final_error(req, 500, "request buffer append");
-                    break;
-                }
-            }
-
-            head_pos += size;
+            go_next(req, buff, size - ignore_size);
 
             req->got_sp = false;
             req->got_cr = false;
             req->got_lf = false;
             req->need_process = false;
 
-            // If buffer is not needed
-            if (head_pos >= read_size) {
-                if (req->buff != nullptr) {
-                    free(req->buff);
-                    req->buff = nullptr;
-                    req->buff_size = 0;
-                }
-            }
+            req->buff_head += size;
         }
     }
 
-    if (req->wait_state != request_wait_state::wait_none) {
-        if (head_pos < read_size) {
-            char* buff = in_buff + head_pos;
-            size_t size = read_size - head_pos;
+//    if (req->wait_state == request_wait_state::wait_all) {
+//        go_next(req, req->buff + req->buff_offset, req->buff_size - req->buff_offset);
+//        req->buff_offset = req->buff_size;
+//    }
 
-            if (req->wait_state == request_wait_state::wait_all) {
-                go_next(req, buff, size);
-            } else if (!request_helper::request_buff_append(req, buff, size)) {
-                go_final_error(req, 500, "buffer append to request");
-            }
-        }
-    }
+//    if (req->wait_state != request_wait_state::wait_none) {
+//        if (head_pos < read_size) {
+//            char* buff = in_buff + head_pos;
+//            size_t size = read_size - head_pos;
+
+//            if (req->wait_state == request_wait_state::wait_all) {
+//                go_next(req, buff, size);
+//            } else if (!request_helper::request_buff_append(req, buff, size)) {
+//                go_final_error(req, 500, "buffer append to request");
+//            }
+//        }
+//    }
 }
 
 void worker::handle_out(request* req) noexcept

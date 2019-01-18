@@ -29,9 +29,10 @@ private:
     void go_final_success(request* req) noexcept;
     void go_final_error(request* req, int code, const std::string& error) noexcept;
     void go_next(request* req, const char* buff, size_t size) noexcept;
-
     void handle_in(request* req) noexcept;
+
     void handle_out(request* req) noexcept;
+
     void loop() noexcept;
 
     static std::pair<http::string, http::string> parse_header(const char* buff, size_t size) noexcept;

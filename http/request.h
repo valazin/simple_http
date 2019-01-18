@@ -104,6 +104,8 @@ struct request
 
     char* buff = nullptr;
     size_t buff_size = 0;
+    size_t buff_head = 0;
+    size_t buff_written_size = 0;
 
     bool got_sp = false;
     bool got_cr = false;
