@@ -7,6 +7,7 @@ project(simple_http)
 add_executable(${PROJECT_NAME}
     "main.cpp"
     "utility/filesystem.cpp"
+    "utility/datetime.cpp"
     "http/string.cpp"
     "http/uri.cpp"
     "http/request.cpp"

@@ -1,14 +1,17 @@
 #include "hls_live_storage.h"
 
 #include <deque>
+#include <atomic>
 #include <sstream>
-#include <shared_mutex>
 #include <algorithm>
 
 #include <glog/logging.h>
 
+#include "../utility/datetime.h"
+
 struct playlist
 {
+    std::atomic<int64_t> last_read = -1;
     std::string cache_txt;
     std::deque<std::shared_ptr<chunk>> chunks;
     mutable std::shared_mutex mtx;
@@ -21,6 +24,16 @@ hls_live_storage::hls_live_storage(size_t live_size,
     _keep_size(keep_size),
     _hostname(hostname)
 {
+}
+
+int64_t hls_live_storage::get_last_read(const std::string &plst_id) noexcept
+{
+    std::shared_lock lock(_plst_mtx);
+    playlist* plst = find_playlist(plst_id);
+    if (plst != nullptr) {
+        return plst->last_read;
+    }
+    return -1;
 }
 
 bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) noexcept
@@ -36,20 +49,21 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
         return false;
     }
 
-    // TODO: app map mutex. not important
+//    std::unique_lock plst_lock(_plst_mtx);
     playlist* plst = find_or_create_playlist(plst_id);
     if (plst != nullptr) {
         _playlists.insert({plst_id, plst});
     } else {
         return false;
     }
+//    plst_lock.unlock();
 
     std::unique_lock lock(plst->mtx);
 
     if (plst->chunks.empty()) {
         plst->chunks.push_back(cnk);
     } else if (cnk->seq == 0) {
-        LOG(INFO) << "WARNING: clear all because seq 0";
+        LOG(WARNING) << "clear all because seq 0";
         plst->chunks.clear();
         plst->chunks.push_back(cnk);
     } else {
@@ -116,11 +130,13 @@ std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, i
 {
     LOG(INFO) << "start live get_chunk " << plst_id << " " << seq;
 
-    // TODO: app map mutex. not important
+//    std::shared_lock plst_lock(_plst_mtx);
     playlist* plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return nullptr;
     }
+    plst->last_read = datetime::unix_timestamp();
+//    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
 
@@ -140,14 +156,18 @@ std::string hls_live_storage::get_playlist(const std::string &plst_id) const noe
 {
     LOG(INFO) << "start live get_playlist " << plst_id;
 
-    // TODO: app map mutex. not important
+//    std::shared_lock plst_lock(_plst_mtx);
     playlist* plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return std::string();
     }
+    plst->last_read = datetime::unix_timestamp();
+//    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
+
     LOG(INFO) << "stop live get_playlist " << plst_id;
+
     return plst->cache_txt;
 }
 

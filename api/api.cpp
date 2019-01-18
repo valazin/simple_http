@@ -77,7 +77,7 @@ void api::handle_request(http::request *req) noexcept
     }
 
     switch(cxt->method) {
-    case hls_method::post_chunk: {
+    case hls_method::post_live_chunk: {
         auto cnk = std::make_shared<chunk>();
         cnk->seq = cxt->seq;
         cnk->start_ut_msecs = cxt->start_ut_msecs;
@@ -98,8 +98,28 @@ void api::handle_request(http::request *req) noexcept
             }
         }
 
+        break;
+    }
+
+    case hls_method::post_archive_chunk: {
+        auto cnk = std::make_shared<chunk>();
+        cnk->seq = cxt->seq;
+        cnk->start_ut_msecs = cxt->start_ut_msecs;
+        cnk->duration_msecs = cxt->duration_msecs;
+        cnk->buff = req->body.buff;
+        cnk->size = req->body.buff_size;
+
+        req->body.buff = nullptr;
+        req->body.buff_size = 0;
+
+        // TODO: how to handle error?
+
         if (_archive_storage) {
-            _archive_storage->add_chunk(cxt->hls_id, cnk);
+            if (_archive_storage->add_chunk(cxt->hls_id, cnk)) {
+                req->resp.code = 200;
+            } else {
+                req->resp.code = 500;
+            }
         }
 
         break;
@@ -125,6 +145,21 @@ void api::handle_request(http::request *req) noexcept
             req->resp.body_str = txt;
         } else {
             req->resp.code = 500;
+        }
+        break;
+    }
+
+    case hls_method::get_live_last_read: {
+        if (_live_storage) {
+            int64_t timestamp = _live_storage->get_last_read(cxt->hls_id);
+            if (timestamp > 0) {
+                req->resp.code = 200;
+                req->resp.body_str = "{ \"lastRead:\" " + std::to_string(timestamp) + " }";
+            } else {
+                req->resp.code = 404;
+            }
+        } else {
+            req->resp.code = 404;
         }
         break;
     }
@@ -173,9 +208,16 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
 
     switch (method) {
     case http::request_line_method::post: {
-        if (path_items.size() == 1) {
-            if (path_items[0].compare("files") == 0) {
-                cxt->method = hls_method::post_chunk;
+        if (path_items.size() == 2) {
+            if (path_items[0].compare("live") == 0) {
+                cxt->method = hls_method::post_live_chunk;
+            } else if (path_items[0].compare("archive") == 0) {
+                cxt->method = hls_method::post_archive_chunk;
+            } else {
+                break;
+            }
+
+            if (path_items[1].compare("files") == 0) {
                 return {http::handle_res_type::success};
             }
         }
@@ -194,24 +236,32 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
         cxt->hls_id = std::string(path_items[1].data(), path_items[1].size());
 
         if (path_items[2].compare("live") == 0) {
+
             if (!_live_storage) {
                 return {http::handle_res_type::error, 404};
             }
 
-            http::string file = path_items[3];
-            http::string name = file.cut_by('.');
-            if (file.compare("ts") == 0) {
-                bool ok = false;
-                cxt->seq = name.to_int(ok);
-                if (ok) {
-                    cxt->method = hls_method::get_live_chunk;
+            if (path_items[3].compare("lastread") == 0) {
+                cxt->method = hls_method::get_live_last_read;
+                return {http::handle_res_type::success};
+            } else {
+                http::string file = path_items[3];
+                http::string name = file.cut_by('.');
+                if (file.compare("ts") == 0) {
+                    bool ok = false;
+                    cxt->seq = name.to_int(ok);
+                    if (ok) {
+                        cxt->method = hls_method::get_live_chunk;
+                        return {http::handle_res_type::success};
+                    }
+                } else if (file.compare("m3u8") == 0) {
+                    cxt->method = hls_method::get_live_playlist;
                     return {http::handle_res_type::success};
                 }
-            } else if (file.compare("m3u8") == 0) {
-                cxt->method = hls_method::get_live_playlist;
-                return {http::handle_res_type::success};
             }
+
         } else if (path_items[2].compare("archive") == 0) {
+
             if (!_archive_storage) {
                 return {http::handle_res_type::error, 404};
             }
@@ -238,6 +288,7 @@ http::handle_res api::fetch_hls_context_from_uri(http::request_line_method metho
                 cxt->method = hls_method::get_archive_chunk;
                 return {http::handle_res_type::success};
             }
+
         }
 
         break;

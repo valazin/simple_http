@@ -3,9 +3,11 @@
 #include "hls_archive_storage/hls_arhive_storage.h"
 
 // bugs:
-// TODO: safe path to storage
-// TODO: htop says that only two thread works
 // TODO: for every hls a separate collection in mongo
+// TODO: safe path to storage
+// TODO: sendfile is can block by disk
+// TODO: handler when close connnection
+// TODO: htop says that only two thread works
 // TODO: one thread eat 100% cpu after client stop loading
 // TODO: error when requesting from curl
 // TODO: handling "client close connection" event
@@ -15,29 +17,32 @@
 // optimization:
 // TODO: can we read/write until EAGAIN
 // TODO: for every request create buffer for escape copy
+// TODO: test without mutex. if it will give advantageous use stick by hls id
 
 // feature:
-// TODO: rest error code
-// TODO: dummy segments
-// TODO: last read
 // TODO: clear by timer
-// TODO: use location option for storage module
+// TODO: archive timeline
+// TODO: delete archive
+// TODO: rest error code
 // TODO: config
 // TODO: logs
 // TODO: docker
-// TODO: timeline
+
+// refactoring:
+// TODO: make router
+// TODO: use location option for storage module
 
 int main()
 {
     const std::string host = "10.110.3.43";
-    const uint16_t port = 1025;
+    const uint16_t port = 1030;
     const std::string hostname = host + ":" + std::to_string(port);
 
     const size_t live_size = 5;
     const size_t keep_size = 20;
     hls_live_storage* live_storage = new hls_live_storage(live_size, keep_size, hostname);
 
-    const std::string arhive_dir_path = "/tmp/hls";
+    const std::string arhive_dir_path = "/home/valeriy/Faceter/hls_archive";
     const std::string mongo_uri = "mongodb://10.110.3.43:27017";
 
     std::vector<hls_chunk_info> dummy_list;

@@ -3,6 +3,7 @@
 
 #include <map>
 #include <memory>
+#include <shared_mutex>
 
 #include "../hls/chunk.h"
 
@@ -12,6 +13,8 @@ class hls_live_storage
 {
 public:
     hls_live_storage(size_t live_size, size_t keep_size, const std::string& hostname) noexcept;
+
+    int64_t get_last_read(const std::string& plst_id) noexcept;
 
     bool add_chunk(const std::string& plst_id, const std::shared_ptr<chunk>& cnk) noexcept;
     std::shared_ptr<chunk> get_chunk(const std::string& plst_id, int64_t seq) const noexcept;
@@ -29,6 +32,7 @@ private:
     const size_t _keep_size = 0;
     const std::string _hostname;
     std::map<std::string, playlist*> _playlists;
+    mutable std::shared_mutex _plst_mtx;
 };
 
 #endif // HLS_LIVE_STORAGE_H

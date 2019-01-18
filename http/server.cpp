@@ -84,6 +84,8 @@ bool server::init(const std::string &host, uint16_t port) noexcept
         return false;
     }
 
+    LOG(INFO) << "Listen " << host << " " << port;
+
     const size_t epoll_num = 3;
     _epolls.reserve(epoll_num);
     for (size_t i=0; i<epoll_num; ++i) {
@@ -147,7 +149,7 @@ void server::loop() noexcept
         }
 
         ++i;
-        if (i+1 >= _epolls.size()) {
+        if (i >= _epolls.size()) {
             i = 0;
         }
     }

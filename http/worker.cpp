@@ -21,6 +21,7 @@ worker::worker(int epoll_d) noexcept :
 
 worker::~worker()
 {
+    _isRuning.store(true);
     if (_thread.joinable()) {
         _thread.join();
     }
@@ -28,6 +29,7 @@ worker::~worker()
 
 void worker::start() noexcept
 {
+    LOG(INFO) << "Listen " << _epoll_d;
     _isRuning.store(true);
     _thread = std::thread(&worker::loop, this);
 }
