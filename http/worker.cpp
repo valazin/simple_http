@@ -40,10 +40,10 @@ void worker::release_request(request *req) noexcept
 {
     close(req->sock_d);
     if (req->buff != nullptr) {
-        free(req->buff);
+        delete[] req->buff;
     }
     if (req->body.buff != nullptr) {
-        free(req->body.buff);
+        delete[] req->body.buff;
     }
     if (req->resp.free_body && req->resp.body != nullptr) {
         free(req->resp.body);
@@ -164,7 +164,13 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
         } else {
             switch (req->line.method) {
             case request_line_method::post:
+                delete[] req->buff;
                 if (req->body.wait_size > 0) {
+                    req->buff = new char[req->body.wait_size];
+                    req->buff_size = req->body.wait_size;
+                    req->buff_head = 0;
+                    req->buff_written_size = 0;
+
                     req->state = request_state::read_body;
                     req->wait_state = request_wait_state::wait_all;
                 } else {
@@ -187,12 +193,15 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
     }
 
     case request_state::read_body: {
-        if (!request_helper::request_body_buff_append(req, buff, size)) {
-            go_final_error(req, 500, "coundn't save body");
-            return;
-        }
+        if (req->buff_written_size >= req->body.wait_size) {
+            req->body.buff = req->buff;
+            req->body.buff_size = req->buff_written_size;
 
-        if (req->body.buff_size >= req->body.wait_size) {
+            req->buff = nullptr;
+            req->buff_size = 0;
+            req->buff_head = 0;
+            req->buff_written_size = 0;
+
             go_final_success(req);
         }
         break;
@@ -260,6 +269,10 @@ void worker::handle_in(request* req) noexcept
                 }
             }
         } else if (req->wait_state == request_wait_state::wait_all) {
+            char* buff = req->buff + req->buff_head;
+            size_t size = req->buff_written_size - (req->buff_head + 1);
+            go_next(req, buff, size);
+            req->buff_head += size;
             break;
         } else if (req->wait_state == request_wait_state::wait_none) {
             break;
@@ -280,24 +293,6 @@ void worker::handle_in(request* req) noexcept
             req->buff_head += size;
         }
     }
-
-//    if (req->wait_state == request_wait_state::wait_all) {
-//        go_next(req, req->buff + req->buff_offset, req->buff_size - req->buff_offset);
-//        req->buff_offset = req->buff_size;
-//    }
-
-//    if (req->wait_state != request_wait_state::wait_none) {
-//        if (head_pos < read_size) {
-//            char* buff = in_buff + head_pos;
-//            size_t size = read_size - head_pos;
-
-//            if (req->wait_state == request_wait_state::wait_all) {
-//                go_next(req, buff, size);
-//            } else if (!request_helper::request_buff_append(req, buff, size)) {
-//                go_final_error(req, 500, "buffer append to request");
-//            }
-//        }
-//    }
 }
 
 void worker::handle_out(request* req) noexcept
