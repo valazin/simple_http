@@ -35,7 +35,7 @@ bool filesystem::create_directory(const std::string& path)
         if (errno == EEXIST) {
             return true;
         }
-        perror("create dirs");
+        perror("mkdir");
     }
     return false;
 }

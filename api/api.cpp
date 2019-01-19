@@ -9,7 +9,7 @@
 #include "../hls_live_storage/hls_live_storage.h"
 #include "../hls_archive_storage/hls_arhive_storage.h"
 
-api::api(hls_live_storage *live_storage, hls_archive_storage* archive_storage) :
+api::api(hls_live::storage* live_storage, hls_archive_storage* archive_storage) :
     _live_storage(live_storage),
     _archive_storage(archive_storage)
 {
@@ -91,10 +91,11 @@ void api::handle_request(http::request *req) noexcept
         // TODO: how to handle error?
 
         if (_live_storage) {
-            if (_live_storage->add_chunk(cxt->hls_id, cnk)) {
+            hls_live::error_type err = _live_storage->add_chunk(cxt->hls_id, cnk);
+            if (err == hls_live::error_type::no_error) {
                 req->resp.code = 200;
             } else {
-                req->resp.code = 500;
+                req->resp.code = hls_live_error_to_rest_code(err);
             }
         }
 
@@ -126,40 +127,36 @@ void api::handle_request(http::request *req) noexcept
     }
 
     case hls_method::get_live_chunk: {
-        auto cnk = _live_storage->get_chunk(cxt->hls_id, cxt->seq);
-        if (cnk != nullptr) {
+        auto [cnk, err] = _live_storage->get_chunk(cxt->hls_id, cxt->seq);
+        if (err == hls_live::error_type::no_error) {
             req->resp.code = 200;
             req->resp.body_cstr = cnk->buff;
             req->resp.body_size = cnk->size;
             req->resp.free_cstr = false;
         } else {
-            req->resp.code = 404;
+            req->resp.code = hls_live_error_to_rest_code(err);
         }
         break;
     }
 
     case hls_method::get_live_playlist: {
-        std::string txt = _live_storage->get_playlist(cxt->hls_id);
-        if (!txt.empty()) {
+        auto [txt, err] = _live_storage->get_playlist_txt(cxt->hls_id);
+        if (err == hls_live::error_type::no_error) {
             req->resp.code = 200;
             req->resp.body_str = txt;
         } else {
-            req->resp.code = 500;
+            req->resp.code = hls_live_error_to_rest_code(err);
         }
         break;
     }
 
     case hls_method::get_live_last_read: {
-        if (_live_storage) {
-            int64_t timestamp = _live_storage->get_last_read(cxt->hls_id);
-            if (timestamp > 0) {
-                req->resp.code = 200;
-                req->resp.body_str = "{ \"lastRead:\" " + std::to_string(timestamp) + " }";
-            } else {
-                req->resp.code = 404;
-            }
+        auto [timestamp, err] = _live_storage->get_last_read(cxt->hls_id);
+        if (err == hls_live::error_type::no_error) {
+            req->resp.code = 200;
+            req->resp.body_str = "{ \"lastRead:\" " + std::to_string(timestamp) + " }";
         } else {
-            req->resp.code = 404;
+            req->resp.code = hls_live_error_to_rest_code(err);
         }
         break;
     }
@@ -331,4 +328,19 @@ http::handle_res api::fetch_hls_context_from_header(http::request_line_method me
     }
 
     return {http::handle_res_type::ignore};
+}
+
+int api::hls_live_error_to_rest_code(hls_live::error_type error) noexcept
+{
+    switch (error) {
+    case hls_live::error_type::no_error:
+        return 200;
+    case hls_live::error_type::internal_error:
+        return 500;
+    case hls_live::error_type::chunk_not_found:
+    case hls_live::error_type::playlist_not_found:
+        return 404;
+    case hls_live::error_type::invalid_in_paramets:
+        return 400;
+    }
 }

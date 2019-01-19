@@ -2,37 +2,67 @@
 #define HLS_LIVE_STORAGE_H
 
 #include <map>
+#include <deque>
 #include <memory>
+#include <atomic>
 #include <shared_mutex>
 
 #include "../hls/chunk.h"
+#include "hls_live_storage_error.h"
 
-struct playlist;
+namespace hls_live {
 
-class hls_live_storage
+class storage
 {
 public:
-    hls_live_storage(size_t live_size, size_t keep_size, const std::string& hostname) noexcept;
+    storage(size_t live_size, size_t keep_size,
+            const std::string& hostname) noexcept;
 
-    int64_t get_last_read(const std::string& plst_id) noexcept;
+    std::tuple<int64_t, error_type>
+    get_last_read(const std::string& plst_id) noexcept;
 
-    bool add_chunk(const std::string& plst_id, const std::shared_ptr<chunk>& cnk) noexcept;
-    std::shared_ptr<chunk> get_chunk(const std::string& plst_id, int64_t seq) const noexcept;
-    std::string get_playlist(const std::string& plst_id) const noexcept;
+    error_type
+    add_chunk(const std::string& plst_id,
+              const std::shared_ptr<chunk>& cnk) noexcept;
+
+    std::tuple<std::shared_ptr<chunk>, error_type>
+    get_chunk(const std::string& plst_id, int64_t seq) const noexcept;
+
+    std::tuple<std::string, error_type>
+    get_playlist_txt(const std::string& plst_id) const noexcept;
 
 private:
-    inline playlist* find_playlist(const std::string& plst_id) const noexcept;
-    inline playlist* find_or_create_playlist(const std::string& plst_id) const noexcept;
+    struct playlist
+    {
+        std::atomic<int64_t> last_read = 0;
+        std::string cache_txt;
+        std::deque<std::shared_ptr<chunk>> chunks;
+        mutable std::shared_mutex mtx;
+    };
 
-    inline std::string build_playlist(const std::string& plst_id, playlist* plst) const noexcept;
-    inline std::string build_chunk_url(const std::string& plst_id, const std::shared_ptr<chunk>& cnk) const noexcept;
+    inline playlist*
+    find_playlist(const std::string& plst_id) const noexcept;
+
+    inline playlist*
+    find_or_create_playlist(const std::string& plst_id) const noexcept;
+
+    inline std::string
+    build_playlist(const std::string& plst_id, playlist* plst) const noexcept;
+
+    inline std::string
+    build_chunk_url(const std::string& plst_id,
+                    const std::shared_ptr<chunk>& cnk) const noexcept;
 
 private:
     const size_t _live_size = 0;
     const size_t _keep_size = 0;
+
     const std::string _hostname;
-    std::map<std::string, playlist*> _playlists;
+
     mutable std::shared_mutex _plst_mtx;
+    std::map<std::string, playlist*> _playlists;
 };
+
+}
 
 #endif // HLS_LIVE_STORAGE_H
