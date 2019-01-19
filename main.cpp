@@ -1,3 +1,5 @@
+#include <thread>
+
 #include "api/api.h"
 #include "hls_live_storage/hls_live_storage.h"
 #include "hls_archive_storage/hls_arhive_storage.h"
@@ -31,7 +33,7 @@
 
 int main()
 {
-    const std::string host = "10.110.3.43";
+    const std::string host = "127.0.0.1";
     const uint16_t port = 1030;
     const std::string hostname = host + ":" + std::to_string(port);
 
@@ -39,7 +41,7 @@ int main()
     const size_t keep_size = 20;
     hls_live::storage* live_storage = new hls_live::storage(live_size, keep_size, hostname);
 
-    const std::string arhive_dir_path = "/home/valeriy/Faceter/hls_archive";
+    const std::string arhive_dir_path = "/tmp/hls_archive";
     const std::string mongo_uri = "mongodb://10.110.3.43:27017";
 
     std::vector<hls_chunk_info> dummy_list;
@@ -58,4 +60,10 @@ int main()
 
     api a(live_storage, archive_storage);
     a.start(host, port);
+
+    // use main thread like auxilary worker
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(60));
+        live_storage->delete_playlists(30);
+    }
 }
