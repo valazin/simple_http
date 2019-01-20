@@ -1,5 +1,7 @@
 #include <thread>
+#include <glog/logging.h>
 
+#include "settings/settings.h"
 #include "api/api.h"
 #include "hls_live_storage/hls_live_storage.h"
 #include "hls_archive_storage/hls_arhive_storage.h"
@@ -34,30 +36,44 @@
 
 int main()
 {
-    const std::string host = "127.0.0.1";
-    const uint16_t port = 1030;
+    settings conf("/home/bitbyte/Projects/simple_http/conf");
+
+    auto [http_conf, http_ok] = conf.get_http_server_settings();
+    if (!http_ok) {
+        return -1;
+    }
+    const std::string host = http_conf.host;
+    const unsigned int port = http_conf.port;
     const std::string hostname = host + ":" + std::to_string(port);
 
-    const size_t live_size = 5;
-    const size_t keep_size = 20;
-    hls_live::storage* live_storage = new hls_live::storage(live_size, keep_size, hostname);
+    auto [live_conf, live_ok] = conf.get_live_hls_settings();
+    hls_live::storage* live_storage = nullptr;
+    if (live_ok) {
+        live_storage = new hls_live::storage(live_conf.live_size,
+                                             live_conf.keep_size,
+                                             hostname);
+    }
 
-    const std::string arhive_dir_path = "/tmp/hls_archive";
-    const std::string mongo_uri = "mongodb://10.110.3.43:27017";
+    auto [archive_conf, archive_ok] = conf.get_archive_hls_settings();
+    hls_archive_storage* archive_storage = nullptr;
+    if (archive_ok) {
+        std::vector<hls_chunk_info> dummy_list;
+        for (auto dummy : archive_conf.dummy_segments) {
+            hls_chunk_info info;
+            info.path = dummy.path;
+            info.duration_msecs = dummy.durration;
+            dummy_list.push_back(info);
+        }
 
-    std::vector<hls_chunk_info> dummy_list;
+        archive_storage = new hls_archive_storage(archive_conf.archive_dir_path,
+                                                  hostname,
+                                                  archive_conf.mongo_uri,
+                                                  dummy_list);
+    }
 
-    hls_chunk_info dummy_10sec;
-    dummy_10sec.path = "/tmp/hls/dummy_10s.ts";
-    dummy_10sec.duration_msecs = 9960;
-    dummy_list.push_back(dummy_10sec);
-
-    hls_chunk_info dummy_1sec;
-    dummy_1sec.path = "/tmp/hls/dummy_1s.ts";
-    dummy_1sec.duration_msecs = 960;
-    dummy_list.push_back(dummy_1sec);
-
-    hls_archive_storage* archive_storage = new hls_archive_storage(arhive_dir_path, hostname, mongo_uri, dummy_list);
+    if (!live_storage && !archive_storage) {
+        return -1;
+    }
 
     api a(live_storage, archive_storage);
     a.start(host, port);

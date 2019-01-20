@@ -51,6 +51,7 @@ std::tuple<archive_hls_settings, bool> settings::get_archive_hls_settings() cons
     try {
         const Setting& archive_hls = root["archive_hls"];
         archive_hls.lookupValue("archive_dir_path", result.archive_dir_path);
+        archive_hls.lookupValue("mongo_uri", result.mongo_uri);
 
         const Setting& segments = archive_hls["dummy_segments"];
 

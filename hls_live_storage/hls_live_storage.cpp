@@ -244,6 +244,11 @@ storage::build_playlist(const std::string& plst_id,
         --end;
     }
 
+    if (plst->chunks.empty()) {
+        LOG(WARNING) << "chunks empty after trimming while building playlist";
+        return std::string();
+    }
+
     int64_t max_duration = 0;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
         const auto& cnk = (*i);
@@ -258,16 +263,16 @@ storage::build_playlist(const std::string& plst_id,
     ss << "#EXT-X-VERSION:3" << std::endl;
     ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
 
-    bool disc_exists = false;
+    bool disc_added = false;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
         const auto& cnk = (*i);
         if (cnk->buff != nullptr) {
-            disc_exists = false;
+            disc_added = false;
 
             ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
             ss << build_chunk_url(plst_id, cnk) << std::endl;
-        } else if (!disc_exists) {
-            disc_exists = true;
+        } else if (!disc_added) {
+            disc_added = true;
             ss << "#EXT-X-DISCONTINUITY";
         }
     }

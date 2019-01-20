@@ -1,0 +1,32 @@
+http_server =
+{
+    host = "127.0.0.1";
+    port = 1024;
+};
+
+live_hls =
+{
+    live_size = 5;
+    keep_size = 10;
+};
+
+archive_hls =
+{
+    archive_dir_path = "tmp/hls_archive";
+    mongo_uri = "mongodb://10.110.3.43:27017"
+
+    dummy_segments =
+    {
+        segment_10s =
+        {
+            path = "/tmp/hls/dummy_10s.ts";
+            duration = 9960;
+        },
+
+        segment_1s =
+        {
+            path = "/tmp/hls/dummy_1s.ts";
+            duratin = 960;
+        }
+    };
+};

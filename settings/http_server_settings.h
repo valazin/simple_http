@@ -6,7 +6,7 @@
 struct http_server_settings
 {
     std::string host;
-    int port = 0;
+    unsigned int port = 0;
 };
 
 #endif // HTTP_SERVER_SETTINGS_H

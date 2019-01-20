@@ -26,7 +26,7 @@ public:
     api(hls_live::storage* live_storage, hls_archive_storage* archive_storage);
     ~api();
 
-    void start(const std::string& host, uint16_t port) noexcept;
+    void start(const std::string& host, unsigned int port) noexcept;
 
 private:
     http::handle_res handle_uri(http::request* req, http::uri uri) noexcept;

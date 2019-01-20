@@ -27,7 +27,7 @@ server::~server()
 }
 
 bool server::start(const std::string &host,
-                   uint16_t port,
+                   unsigned int port,
                    std::function<void(request* request)> request_handler,
                    std::function<handle_res(request*, http::uri)> uri_handler,
                    std::function<handle_res(request*, http::string, http::string)> header_handler) noexcept

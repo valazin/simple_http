@@ -21,7 +21,7 @@ api::~api()
     _server->stop();
 }
 
-void api::start(const std::string &host, uint16_t port) noexcept
+void api::start(const std::string &host, unsigned int port) noexcept
 {
     _server->start(host, port,
                    std::bind(&api::handle_request, this, std::placeholders::_1),
