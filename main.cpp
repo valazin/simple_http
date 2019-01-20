@@ -5,6 +5,7 @@
 #include "hls_archive_storage/hls_arhive_storage.h"
 
 // bugs:
+// TODO: use shared buff. We don't know this buff is needed to delete or free
 // TODO: safe path to storage
 // TODO: for every hls a separate collection in mongo
 // TODO: sendfile is can block by disk
@@ -12,10 +13,10 @@
 
 // feature:
 // TODO: rest error code
+// TODO: clear by timer
 // TODO: config
 // TODO: logs
 // TODO: docker
-// TODO: clear by timer
 // TODO: archive timeline
 // TODO: archive size
 // TODO: delete archive

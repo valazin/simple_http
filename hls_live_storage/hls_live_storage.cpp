@@ -181,7 +181,7 @@ storage::delete_playlists(int64_t unmodified_secs) noexcept
 
     std::unique_lock plst_lock(_plst_mtx);
 
-    int64_t now = datetime::unix_timestamp();
+    const int64_t now = datetime::unix_timestamp();
 
     auto i = _playlists.begin();
     while (i != _playlists.end()) {
@@ -232,13 +232,21 @@ storage::build_playlist(const std::string& plst_id,
     }
 
     auto beg = plst->chunks.cbegin();
+    auto end = plst->chunks.cend();
     if (plst->chunks.size() > _live_size) {
-        beg = plst->chunks.cend() - static_cast<int64_t>(_live_size);
+        beg = end - static_cast<int64_t>(_live_size);
+    }
+
+    while (beg < end && (*beg)->buff == nullptr) {
+        ++beg;
+    }
+    while ((end-1) > beg && (*(end-1))->buff == nullptr) {
+        --end;
     }
 
     int64_t max_duration = 0;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
-        const auto cnk = (*i);
+        const auto& cnk = (*i);
         if (cnk->duration_msecs > max_duration) {
             max_duration = cnk->duration_msecs;
         }
@@ -250,11 +258,18 @@ storage::build_playlist(const std::string& plst_id,
     ss << "#EXT-X-VERSION:3" << std::endl;
     ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
 
+    bool disc_exists = false;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
-        // TODO: add discontiniuty if it is here
-        const auto cnk = (*i);
-        ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
-        ss << build_chunk_url(plst_id, cnk) << std::endl;
+        const auto& cnk = (*i);
+        if (cnk->buff != nullptr) {
+            disc_exists = false;
+
+            ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
+            ss << build_chunk_url(plst_id, cnk) << std::endl;
+        } else if (!disc_exists) {
+            disc_exists = true;
+            ss << "#EXT-X-DISCONTINUITY";
+        }
     }
 
     return ss.str();

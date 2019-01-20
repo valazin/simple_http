@@ -14,5 +14,4 @@ enum class error_type
 
 }
 
-
 #endif // HLS_LIVE_STORAGE_ERROR_H
