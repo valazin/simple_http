@@ -1,31 +1,38 @@
 #include "hls_live_storage.h"
 
-#include <deque>
 #include <sstream>
-#include <shared_mutex>
-#include <algorithm>
 
 #include <glog/logging.h>
 
-struct playlist
-{
-    std::string cache_txt;
-    std::deque<std::shared_ptr<chunk>> chunks;
-    mutable std::shared_mutex mtx;
-};
+#include "../utility/datetime.h"
 
-hls_live_storage::hls_live_storage(size_t live_size,
-                                   size_t keep_size,
-                                   const std::string &hostname) noexcept :
+using namespace hls_live;
+
+storage::storage(size_t live_size,
+                 size_t keep_size,
+                 const std::string& hostname) noexcept :
     _live_size(live_size),
     _keep_size(keep_size),
     _hostname(hostname)
 {
 }
 
-bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) noexcept
+std::tuple<int64_t, error_type>
+storage::get_last_read(const std::string& plst_id) const noexcept
 {
-    LOG(INFO) << "start post_chunk " << plst_id << " "
+    std::shared_lock lock(_plst_mtx);
+    auto plst = find_playlist(plst_id);
+    if (plst != nullptr) {
+        return {plst->last_read, error_type::no_error};
+    }
+    return {0, error_type::playlist_not_found};
+}
+
+error_type
+storage::add_chunk(const std::string& plst_id,
+                   const std::shared_ptr<chunk>& cnk) noexcept
+{
+    LOG(INFO) << "start live post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_ut_msecs << " "
               << cnk->duration_msecs;
@@ -33,23 +40,25 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
     if (cnk->seq < 0
             || cnk->start_ut_msecs < 0
             || cnk->duration_msecs <= 0 ) {
-        return false;
+        return error_type::invalid_in_paramets;
     }
 
-    // TODO: app map mutex. not important
-    playlist* plst = find_or_create_playlist(plst_id);
+    std::unique_lock plst_lock(_plst_mtx);
+    auto plst = find_or_create_playlist(plst_id);
     if (plst != nullptr) {
         _playlists.insert({plst_id, plst});
     } else {
-        return false;
+        return error_type::internal_error;
     }
+    plst->last_modyfied = datetime::unix_timestamp();
+    plst_lock.unlock();
 
     std::unique_lock lock(plst->mtx);
 
     if (plst->chunks.empty()) {
         plst->chunks.push_back(cnk);
     } else if (cnk->seq == 0) {
-        LOG(INFO) << "WARNING: clear all because seq 0";
+        LOG(WARNING) << "clear all because seq is 0";
         plst->chunks.clear();
         plst->chunks.push_back(cnk);
     } else {
@@ -104,54 +113,97 @@ bool hls_live_storage::add_chunk(const std::string &plst_id, const std::shared_p
 
     plst->cache_txt = build_playlist(plst_id, plst);
 
-    LOG(INFO) << "stop post_chunk " << plst_id << " "
+    LOG(INFO) << "stop live post_chunk " << plst_id << " "
               << cnk->seq << " "
               << cnk->start_ut_msecs << " "
               << cnk->duration_msecs;
 
-    return true;
+    return error_type::no_error;
 }
 
-std::shared_ptr<chunk> hls_live_storage::get_chunk(const std::string &plst_id, int64_t seq) const noexcept
+std::tuple<std::shared_ptr<chunk>, error_type>
+storage::get_chunk(const std::string& plst_id, int64_t seq) const noexcept
 {
-    LOG(INFO) << "start get_chunk " << plst_id << " " << seq;
+    LOG(INFO) << "start live get_chunk " << plst_id << " " << seq;
 
-    // TODO: app map mutex. not important
-    playlist* plst = find_playlist(plst_id);
+    std::shared_lock plst_lock(_plst_mtx);
+    auto plst = find_playlist(plst_id);
     if (plst == nullptr) {
-        return nullptr;
+        return {nullptr, error_type::playlist_not_found};
     }
+    plst->last_read.store(datetime::unix_timestamp());
+    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
+
+    if (plst->chunks.empty()) {
+        LOG(WARNING) << "playlist exists and is empty";
+        return {nullptr, error_type::chunk_not_found};
+    }
 
     auto&& front = plst->chunks.front();
     auto&& back = plst->chunks.back();
     if (seq >= front->seq && seq <= back->seq) {
-        int64_t front_gap = seq - plst->chunks.front()->seq;
-        LOG(INFO) << "stop get_chunk " << plst_id << " " << seq;
-        return *(plst->chunks.cbegin() + front_gap);
+        int64_t front_gap = seq - front->seq;
+        LOG(INFO) << "stop live get_chunk " << plst_id << " " << seq;
+        return {*(plst->chunks.cbegin() + front_gap), error_type::no_error};
     }
 
-    LOG(INFO) << "fail stop get_chunk " << plst_id << " " << seq;
-    return nullptr;
+    return {nullptr, error_type::chunk_not_found};
 }
 
-std::string hls_live_storage::get_playlist(const std::string &plst_id) const noexcept
+std::tuple<std::string, error_type>
+storage::get_playlist_txt(const std::string &plst_id) const noexcept
 {
-    LOG(INFO) << "start get_playlist " << plst_id;
+    LOG(INFO) << "start live get_playlist " << plst_id;
 
-    // TODO: app map mutex. not important
-    playlist* plst = find_playlist(plst_id);
+    std::shared_lock plst_lock(_plst_mtx);
+    auto plst = find_playlist(plst_id);
     if (plst == nullptr) {
-        return std::string();
+        return {std::string(), error_type::playlist_not_found};
     }
+    plst->last_read.store(datetime::unix_timestamp());
+    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
-    LOG(INFO) << "stop get_playlist " << plst_id;
-    return plst->cache_txt;
+
+    LOG(INFO) << "stop live get_playlist " << plst_id;
+
+    return {plst->cache_txt, error_type::no_error};
 }
 
-playlist* hls_live_storage::find_playlist(const std::string &plst_id) const noexcept
+std::tuple<int, error_type>
+storage::delete_playlists(int64_t unmodified_secs) noexcept
+{
+    LOG(INFO) << "start delete live playlists " << unmodified_secs;
+
+    int res = 0;
+
+    std::unique_lock plst_lock(_plst_mtx);
+
+    const int64_t now = datetime::unix_timestamp();
+
+    auto i = _playlists.begin();
+    while (i != _playlists.end()) {
+        if (now - i->second->last_modyfied >= unmodified_secs) {
+            const std::string id = i->first;
+
+            LOG(INFO) << "start delete playlist " << id;
+            i = _playlists.erase(i);
+            res++;
+            LOG(INFO) << "stop delete playlist " << id;
+        } else {
+            ++i;
+        }
+    }
+
+    LOG(INFO) << "stop delete live playlists " << unmodified_secs;
+
+    return {res, error_type::no_error};
+}
+
+std::shared_ptr<storage::playlist>
+storage::find_playlist(const std::string& plst_id) const noexcept
 {
     auto searched = _playlists.find(plst_id);
     if (searched == _playlists.end()) {
@@ -160,29 +212,46 @@ playlist* hls_live_storage::find_playlist(const std::string &plst_id) const noex
     return searched->second;
 }
 
-playlist *hls_live_storage::find_or_create_playlist(const std::string &plst_id) const noexcept
+std::shared_ptr<storage::playlist>
+storage::find_or_create_playlist(const std::string& plst_id) const noexcept
 {
-    playlist* plst = find_playlist(plst_id);
+    auto plst = find_playlist(plst_id);
     if (plst == nullptr) {
-        plst = new playlist;
+        return std::make_shared<playlist>();
     }
     return plst;
 }
 
-std::string hls_live_storage::build_playlist(const std::string &plst_id, playlist *plst) const noexcept
+std::string
+storage::build_playlist(const std::string& plst_id,
+                        std::shared_ptr<playlist>& plst) const noexcept
 {
     if (plst->chunks.empty()) {
+        LOG(WARNING) << "chunks empty while building playlist";
         return std::string();
     }
 
     auto beg = plst->chunks.cbegin();
+    auto end = plst->chunks.cend();
     if (plst->chunks.size() > _live_size) {
-        beg = plst->chunks.cend() - static_cast<int64_t>(_live_size);
+        beg = end - static_cast<int64_t>(_live_size);
+    }
+
+    while (beg < end && (*beg)->buff == nullptr) {
+        ++beg;
+    }
+    while ((end-1) > beg && (*(end-1))->buff == nullptr) {
+        --end;
+    }
+
+    if (plst->chunks.empty()) {
+        LOG(WARNING) << "chunks empty after trimming while building playlist";
+        return std::string();
     }
 
     int64_t max_duration = 0;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
-        const auto cnk = (*i);
+        const auto& cnk = (*i);
         if (cnk->duration_msecs > max_duration) {
             max_duration = cnk->duration_msecs;
         }
@@ -194,16 +263,26 @@ std::string hls_live_storage::build_playlist(const std::string &plst_id, playlis
     ss << "#EXT-X-VERSION:3" << std::endl;
     ss << "#EXT-X-MEDIA-SEQUENCE:" << (*beg)->seq << std::endl;
 
+    bool disc_added = false;
     for (auto i = beg; i<plst->chunks.cend(); ++i) {
-        const auto cnk = (*i);
-        ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
-        ss << build_chunk_url(plst_id, cnk) << std::endl;
+        const auto& cnk = (*i);
+        if (cnk->buff != nullptr) {
+            disc_added = false;
+
+            ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
+            ss << build_chunk_url(plst_id, cnk) << std::endl;
+        } else if (!disc_added) {
+            disc_added = true;
+            ss << "#EXT-X-DISCONTINUITY";
+        }
     }
 
     return ss.str();
 }
 
-std::string hls_live_storage::build_chunk_url(const std::string &plst_id, const std::shared_ptr<chunk> &cnk) const noexcept
+std::string
+storage::build_chunk_url(const std::string& plst_id,
+                         const std::shared_ptr<chunk>& cnk) const noexcept
 {
     return std::string("http://" + _hostname + "/hls/" + plst_id + "/live/" + std::to_string(cnk->seq) + ".ts");
 }

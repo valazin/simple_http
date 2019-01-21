@@ -6,9 +6,11 @@
 enum class hls_method
 {
     undefined,
-    post_chunk,
+    post_live_chunk,
+    post_archive_chunk,
     get_live_chunk,
     get_live_playlist,
+    get_live_last_read,
     get_archive_chunk,
     get_archive_playlist
 };

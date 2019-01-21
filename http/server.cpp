@@ -27,7 +27,7 @@ server::~server()
 }
 
 bool server::start(const std::string &host,
-                   uint16_t port,
+                   unsigned int port,
                    std::function<void(request* request)> request_handler,
                    std::function<handle_res(request*, http::uri)> uri_handler,
                    std::function<handle_res(request*, http::string, http::string)> header_handler) noexcept
@@ -83,6 +83,8 @@ bool server::init(const std::string &host, uint16_t port) noexcept
         perror("listen");
         return false;
     }
+
+    LOG(INFO) << "Listen " << host << " " << port;
 
     const size_t epoll_num = 3;
     _epolls.reserve(epoll_num);
@@ -147,7 +149,7 @@ void server::loop() noexcept
         }
 
         ++i;
-        if (i+1 >= _epolls.size()) {
+        if (i >= _epolls.size()) {
             i = 0;
         }
     }

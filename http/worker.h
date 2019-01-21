@@ -25,6 +25,7 @@ public:
 
 private:
     void release_request(request* req) noexcept;
+    ssize_t write_response_body(request* req) noexcept;
 
     void go_final_success(request* req) noexcept;
     void go_final_error(request* req, int code, const std::string& error) noexcept;
@@ -43,7 +44,7 @@ private:
     std::thread _thread;
 
     static const int timeout_msecs = 30000;
-    static const size_t max_events = 10000;
+    static const size_t max_events = 1000;
     epoll_event events[max_events];
 
     static const size_t in_buff_size = 2*1000000;

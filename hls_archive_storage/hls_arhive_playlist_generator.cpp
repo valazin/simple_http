@@ -5,10 +5,8 @@
 
 #include "hls_chunk_info_repository.h"
 
-hls_arhive_playlist_generator::hls_arhive_playlist_generator(const std::string &host_name,
-                                                             const std::vector<hls_chunk_info> &dummy_list,
+hls_arhive_playlist_generator::hls_arhive_playlist_generator(const std::vector<hls_chunk_info> &dummy_list,
                                                              std::shared_ptr<hls_chunk_info_repository> info_repository) :
-    _host_name(host_name),
     _dummy_list(dummy_list),
     _info_repository(info_repository)
 {
@@ -17,7 +15,8 @@ hls_arhive_playlist_generator::hls_arhive_playlist_generator(const std::string &
 std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
                                                     int64_t
                                                     start_ut_msecs,
-                                                    int64_t duration_msecs) const noexcept
+                                                    int64_t duration_msecs,
+                                                    const std::string &base_uri) const noexcept
 {
     std::stringstream stream;
 
@@ -27,7 +26,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     if (list.empty()) {
         LOG(INFO) << "Not found chunk for " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
         LOG(INFO) << "Fill playlist with dummy chunks";
-        append_dummy_chunk(duration_msecs, stream);
+        append_dummy_chunk(duration_msecs, stream, base_uri);
         return stream.str();
     }
 
@@ -36,7 +35,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     const long front_gap = front.start_ut_msecs - start_ut_msecs;
     if (front_gap > 0) {
         LOG(INFO) << "Front gap " << front_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
-        append_dummy_chunk(front_gap, stream);
+        append_dummy_chunk(front_gap, stream, base_uri);
     }
 
     for (size_t i=0; i<list.size(); ++i) {
@@ -45,12 +44,12 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
             const hls_chunk_info& prev = list.at(i-1);
             long gap = current.start_ut_msecs - (prev.start_ut_msecs + prev.duration_msecs);
             if (gap > 0) {
-                append_dummy_chunk(gap, stream);
+                append_dummy_chunk(gap, stream, base_uri);
             }
         }
 
         const long duration = current.duration_msecs;
-        const std::string uri = _host_name + current.path;
+        const std::string uri = base_uri + current.path;
 
         append_chunk(duration, uri, stream);
     }
@@ -60,7 +59,7 @@ std::string hls_arhive_playlist_generator::generate(const std::string &hls_id,
     const long back_gap = (start_ut_msecs+duration_msecs) - (back.start_ut_msecs+back.duration_msecs);
     if (back_gap > 0) {
         LOG(INFO) << "Back gap " << back_gap << " " << hls_id << " startTime " << start_ut_msecs << " duration " << duration_msecs;
-        append_dummy_chunk(back_gap, stream);
+        append_dummy_chunk(back_gap, stream, base_uri);
     }
 
     stream << "#EXT-X-ENDLIST";
@@ -94,7 +93,8 @@ void hls_arhive_playlist_generator::append_discontinuity_chunk(int64_t msecs,
 }
 
 void hls_arhive_playlist_generator::append_dummy_chunk(int64_t msecs,
-                                                       std::stringstream& stream) const noexcept
+                                                       std::stringstream& stream,
+                                                       const std::string& base_uri) const noexcept
 {
     if (msecs <= 0) {
         return;
@@ -106,7 +106,7 @@ void hls_arhive_playlist_generator::append_dummy_chunk(int64_t msecs,
         }
 
         const int64_t duration_msecs = dummy_info.duration_msecs;
-        const std::string uri = _host_name + dummy_info.path;
+        const std::string uri = base_uri + dummy_info.path;
         const int64_t count = msecs / duration_msecs;
 
         for (unsigned int i=0; i<count; ++i) {
@@ -120,7 +120,7 @@ void hls_arhive_playlist_generator::append_dummy_chunk(int64_t msecs,
 
         assert(smallest_chunk.duration_msecs > msecs);
 
-        const std::string uri = _host_name + smallest_chunk.path;
+        const std::string uri = base_uri + smallest_chunk.path;
         append_discontinuity_chunk(msecs, uri, stream);
 
         msecs -= msecs;
