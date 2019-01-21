@@ -358,6 +358,7 @@ void worker::handle_out(request* req) noexcept
             if (size != -1) {
                 resp.body_size = static_cast<size_t>(size);
             } else {
+                perror("get file size");
                 release_request(req);
                 return;
             }

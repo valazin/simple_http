@@ -270,7 +270,7 @@ storage::build_playlist(const std::string& plst_id,
             disc_added = false;
 
             ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
-            ss << build_chunk_url(plst_id, cnk) << std::endl;
+            ss << build_chunk_url(cnk) << std::endl;
         } else if (!disc_added) {
             disc_added = true;
             ss << "#EXT-X-DISCONTINUITY";
@@ -281,8 +281,7 @@ storage::build_playlist(const std::string& plst_id,
 }
 
 std::string
-storage::build_chunk_url(const std::string& plst_id,
-                         const std::shared_ptr<chunk>& cnk) const noexcept
+storage::build_chunk_url(const std::shared_ptr<chunk>& cnk) const noexcept
 {
-    return std::string("http://" + _hostname + "/hls/" + plst_id + "/live/" + std::to_string(cnk->seq) + ".ts");
+    return std::string(std::to_string(cnk->seq) + ".ts");
 }

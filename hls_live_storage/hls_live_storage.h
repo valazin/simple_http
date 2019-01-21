@@ -56,8 +56,7 @@ private:
                    std::shared_ptr<playlist>& plst) const noexcept;
 
     inline std::string
-    build_chunk_url(const std::string& plst_id,
-                    const std::shared_ptr<chunk>& cnk) const noexcept;
+    build_chunk_url(const std::shared_ptr<chunk>& cnk) const noexcept;
 
 private:
     const size_t _live_size = 0;

@@ -36,7 +36,7 @@
 
 int main()
 {
-    settings conf("/home/valeriy/Faceter/Projects/VideoS/simple_http/conf");
+    settings conf("/opt/conf");
 
     auto [http_conf, http_ok] = conf.get_http_server_settings();
     if (!http_ok) {

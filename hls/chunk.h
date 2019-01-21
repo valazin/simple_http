@@ -8,7 +8,7 @@ struct chunk
     ~chunk()
     {
         if (buff != nullptr) {
-            free(buff);
+            delete[] buff;
         }
     }
 
