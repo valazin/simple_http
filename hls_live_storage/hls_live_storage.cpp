@@ -111,7 +111,7 @@ storage::add_chunk(const std::string& plst_id,
         }
     }
 
-    plst->cache_txt = build_playlist(plst_id, plst);
+    plst->cache_txt = build_playlist_txt(plst);
 
     LOG(INFO) << "stop live post_chunk " << plst_id << " "
               << cnk->seq << " "
@@ -223,8 +223,7 @@ storage::find_or_create_playlist(const std::string& plst_id) const noexcept
 }
 
 std::string
-storage::build_playlist(const std::string& plst_id,
-                        std::shared_ptr<playlist>& plst) const noexcept
+storage::build_playlist_txt(std::shared_ptr<playlist>& plst) const noexcept
 {
     if (plst->chunks.empty()) {
         LOG(WARNING) << "chunks empty while building playlist";

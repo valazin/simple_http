@@ -26,7 +26,7 @@ struct response
 
     //
     char* body_cstr = nullptr;
-    bool free_cstr = true;
+    bool delete_cstr = true;
 
     //
     int body_fd = -1;

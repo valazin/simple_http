@@ -132,7 +132,7 @@ void api::handle_request(http::request *req) noexcept
             req->resp.code = 200;
             req->resp.body_cstr = cnk->buff;
             req->resp.body_size = cnk->size;
-            req->resp.free_cstr = false;
+            req->resp.delete_cstr = false;
         } else {
             req->resp.code = hls_live_error_to_rest_code(err);
         }
