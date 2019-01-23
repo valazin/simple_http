@@ -210,7 +210,7 @@ void worker::go_next(request* req, const char* buff, size_t size) noexcept
                     // save a part of body if it's in req->buff
                     if (req->buff_written_size > req->buff_head) {
                         size_t copy_size = req->buff_written_size - req->buff_head;
-                        memcpy(req->buff + req->buff_head, new_buff, copy_size);
+                        memcpy(new_buff, req->buff + req->buff_head, copy_size);
                         new_buff_written_size += copy_size;
                     }
 
