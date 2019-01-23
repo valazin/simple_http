@@ -20,7 +20,6 @@ storage::storage(size_t live_size,
 std::tuple<int64_t, error_type>
 storage::get_last_read(const std::string& plst_id) const noexcept
 {
-    std::shared_lock lock(_plst_mtx);
     auto plst = find_playlist(plst_id);
     if (plst != nullptr) {
         return {plst->last_read, error_type::no_error};
@@ -43,15 +42,18 @@ storage::add_chunk(const std::string& plst_id,
         return error_type::invalid_in_paramets;
     }
 
-    std::unique_lock plst_lock(_plst_mtx);
     auto plst = find_or_create_playlist(plst_id);
     if (plst != nullptr) {
-        _playlists.insert({plst_id, plst});
+        if (_playlists.count(plst_id) <= 0) {
+            std::unique_lock plst_lock(_plst_mtx);
+            _playlists.insert({plst_id, plst});
+            plst_lock.unlock();
+        }
     } else {
         return error_type::internal_error;
     }
+
     plst->last_modyfied = datetime::unix_timestamp();
-    plst_lock.unlock();
 
     std::unique_lock lock(plst->mtx);
 
@@ -126,13 +128,11 @@ storage::get_chunk(const std::string& plst_id, int64_t seq) const noexcept
 {
     LOG(INFO) << "start live get_chunk " << plst_id << " " << seq;
 
-    std::shared_lock plst_lock(_plst_mtx);
     auto plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return {nullptr, error_type::playlist_not_found};
     }
     plst->last_read.store(datetime::unix_timestamp());
-    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
 
@@ -157,13 +157,11 @@ storage::get_playlist_txt(const std::string &plst_id) const noexcept
 {
     LOG(INFO) << "start live get_playlist " << plst_id;
 
-    std::shared_lock plst_lock(_plst_mtx);
     auto plst = find_playlist(plst_id);
     if (plst == nullptr) {
         return {std::string(), error_type::playlist_not_found};
     }
     plst->last_read.store(datetime::unix_timestamp());
-    plst_lock.unlock();
 
     std::shared_lock lock(plst->mtx);
 
@@ -206,7 +204,7 @@ std::shared_ptr<storage::playlist>
 storage::find_playlist(const std::string& plst_id) const noexcept
 {
     auto searched = _playlists.find(plst_id);
-    if (searched == _playlists.end()) {
+    if (searched == _playlists.cend()) {
         return nullptr;
     }
     return searched->second;
@@ -268,7 +266,7 @@ storage::build_playlist_txt(std::shared_ptr<playlist>& plst) const noexcept
         if (cnk->buff != nullptr) {
             disc_added = false;
 
-            ss << "#EXTINF:" << cnk->duration_msecs/1000.0  << "," << std::endl;
+            ss << "#EXTINF:" << cnk->duration_msecs/1000.0 << "," << std::endl;
             ss << build_chunk_url(cnk) << std::endl;
         } else if (!disc_added) {
             disc_added = true;
