@@ -81,7 +81,7 @@ bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared
                 // TODO: how to resolve this problem?
             }
 
-             hls_chunk_info info;
+            hls_chunk_info info;
             info.hls_id = hls_id;
             info.seq = cnk->seq;
             info.start_ut_msecs = cnk->start_ut_msecs;
@@ -125,7 +125,8 @@ std::string hls_archive_storage::get_playlist(const std::string &hls_id,
               << start_ut_msecs
               << " " << duration_msecs;
 
-    const std::string base_uri = "http://" + _host_name + "/hls/" + hls_id + "/archive";
+//    const std::string base_uri = "http://" + _host_name + "/hls/" + hls_id + "/archive";
+    const std::string base_uri;
     std::string txt = _playlist_generator->generate(hls_id, start_ut_msecs, duration_msecs, base_uri);
 
     LOG(INFO) << "stop archive get playlist "

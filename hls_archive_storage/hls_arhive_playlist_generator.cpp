@@ -81,7 +81,8 @@ void hls_arhive_playlist_generator::append_chunk(int64_t msecs,
                                                  std::stringstream& stream) const noexcept
 {
     stream << "#EXTINF:" << msecs/1000.0 << "," << std::endl;
-    stream << uri << std::endl;
+    // TODO: fix resolve uri
+    stream << uri.substr(1, uri.size()-1) << std::endl;
 }
 
 void hls_arhive_playlist_generator::append_discontinuity_chunk(int64_t msecs,

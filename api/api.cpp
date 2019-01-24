@@ -173,7 +173,7 @@ void api::handle_request(http::request *req) noexcept
     }
 
     case hls_method::get_archive_playlist: {
-        std::string txt = _archive_storage->get_playlist(cxt->hls_id, cxt->start_ut_msecs, cxt->duration_msecs);
+        std::string txt = _archive_storage->get_playlist(cxt->hls_id, cxt->start_ut_msecs * 1000, cxt->duration_msecs * 1000);
         if (!txt.empty()) {
             req->resp.code = 200;
             req->resp.body_str = txt;

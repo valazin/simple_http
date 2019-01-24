@@ -72,15 +72,18 @@ int main()
     }
 
     if (!live_storage && !archive_storage) {
+        LOG(ERROR) << "couldn't create any valid storage";
         return -1;
     }
 
     api a(live_storage, archive_storage);
     a.start(host, port);
 
-    // use main thread like auxilary worker
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(60));
-        live_storage->delete_playlists(30);
+    if (live_storage) {
+        // use main thread like auxilary worker
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(60));
+            live_storage->delete_playlists(30);
+        }
     }
 }
