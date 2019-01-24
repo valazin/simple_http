@@ -109,7 +109,7 @@ bool hls_archive_storage::add_chunk(const std::string &hls_id, const std::shared
     return false;
 }
 
-std::string hls_archive_storage::get_chunk_path(const std::string &hls_id, const std::string &key) noexcept
+std::string hls_archive_storage::get_chunk_path(const std::string &hls_id, const std::string &key) const noexcept
 {
     (void)hls_id;
     return "/" + key;

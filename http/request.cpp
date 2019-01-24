@@ -34,6 +34,7 @@ request_line_method request_helper::str_to_request_method(const char* str, size_
     return result;
 }
 
+// TODO: remove
 bool request_helper::request_buff_append(request* req, const char* buff, size_t size)
 {
     if (req->buff == nullptr) {
@@ -58,6 +59,7 @@ bool request_helper::request_buff_append(request* req, const char* buff, size_t 
     return true;
 }
 
+// TODO: remove
 bool request_helper::request_body_buff_append(request *req, const char *buff, size_t size)
 {
     if (req->body.buff == nullptr) {

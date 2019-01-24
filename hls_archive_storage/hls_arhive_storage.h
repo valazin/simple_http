@@ -20,7 +20,7 @@ public:
                        const std::vector<hls_chunk_info>& dummy_list);
 
     bool add_chunk(const std::string& hls_id, const std::shared_ptr<chunk>& cnk) noexcept;
-    std::string get_chunk_path(const std::string& hls_id, const std::string& key) noexcept;
+    std::string get_chunk_path(const std::string& hls_id, const std::string& key) const noexcept;
     std::string get_playlist(const std::string& hls_id, int64_t start_ut_msecs, int64_t duration_msecs) const noexcept;
 
 private:
