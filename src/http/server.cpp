@@ -5,16 +5,19 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <vector>
 #include <thread>
 
-#include "request.h"
+#include <glog/logging.h>
+
 #include "worker.h"
+#include "request_state_machine.h"
 
 using namespace http;
 
-server::server()
+server::server() noexcept
 {
     _isRunning.store(false);
 }
@@ -26,14 +29,18 @@ server::~server()
 
 bool server::start(const std::string &host,
                    uint16_t port,
-                   std::function<void(request* request)> handler)
+                   request_handler request_handl,
+                   uri_handler uri_hand,
+                   header_handler header_hand) noexcept
 {
     if (!init(host, port)) {
         uninit();
         return false;
     }
 
-    _handler = handler;
+    _request_handler = request_handl;
+    _uri_handler = uri_hand;
+    _header_handler = header_hand;
 
     _isRunning.store(true);
     _thread = std::thread(&server::loop, this);
@@ -41,10 +48,9 @@ bool server::start(const std::string &host,
     return true;
 }
 
-void server::stop()
+void server::stop() noexcept
 {
-    // FIXME: uncomment after test
-//    _isRunning.store(false);
+    _isRunning.store(false);
     if (_thread.joinable()) {
         _thread.join();
     }
@@ -52,7 +58,7 @@ void server::stop()
     uninit();
 }
 
-bool server::init(const std::string &host, uint16_t port)
+bool server::init(const std::string &host, uint16_t port) noexcept
 {
     _sd = socket(AF_INET, SOCK_STREAM, 0);
     if (_sd == -1) {
@@ -78,7 +84,9 @@ bool server::init(const std::string &host, uint16_t port)
         return false;
     }
 
-    const size_t epoll_num = 3;
+    LOG(INFO) << "Listen " << host << " " << port;
+
+    const size_t epoll_num = 1;
     _epolls.reserve(epoll_num);
     for (size_t i=0; i<epoll_num; ++i) {
         int fd = epoll_create1(0);
@@ -99,7 +107,7 @@ bool server::init(const std::string &host, uint16_t port)
     return true;
 }
 
-void server::uninit()
+void server::uninit() noexcept
 {
     for (auto&& worker : _workers) {
         worker->stop();
@@ -111,7 +119,7 @@ void server::uninit()
     }
 }
 
-void server::loop()
+void server::loop() noexcept
 {
     size_t i = 0;
     while (_isRunning) {
@@ -121,20 +129,26 @@ void server::loop()
             continue;
         }
 
-        request* req = new request;
-        req->handler = _handler;
-        req->sock_d = conn_fd;
+        if (fcntl(conn_fd, F_SETFL, O_NONBLOCK) != 0) {
+            perror("fcntl to NONBLOCK");
+            continue;
+        }
 
-        epoll_event* in_event = reinterpret_cast<epoll_event*>(malloc(sizeof(epoll_event)));
-        in_event->events = EPOLLIN;
-        in_event->data.ptr = req;
+        connection* conn = new connection;
+        conn->sock_d = conn_fd;
+        conn->req_handler = _request_handler;
+        conn->req_state_machine = std::make_unique<request_state_machine>(_uri_handler, _header_handler);
 
-        if (epoll_ctl(_epolls.at(i), EPOLL_CTL_ADD, conn_fd, in_event) == -1) {
+        epoll_event in_event;
+        in_event.events = EPOLLIN | EPOLLRDHUP;
+        in_event.data.ptr = conn;
+
+        if (epoll_ctl(_epolls.at(i), EPOLL_CTL_ADD, conn_fd, &in_event) == -1) {
             perror("epoll_ctl");
         }
 
         ++i;
-        if (i+1 >= _epolls.size()) {
+        if (i >= _epolls.size()) {
             i = 0;
         }
     }
