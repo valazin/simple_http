@@ -142,7 +142,7 @@ void worker::handle_out(connection *conn) noexcept
         } else {
             perror("write response");
             go_close_connection(conn);
-            break;
+            return;
         }
     }
 
