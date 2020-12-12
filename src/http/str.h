@@ -23,7 +23,7 @@ struct string
     string cut_by(char ch);
     std::vector<string> split(char ch) const;
 
-    // TODO: use template to_int() instead of this
+    // TODO: refactoring: use template to_int() instead of this
     int64_t to_int(bool& ok) const;
     std::string to_str() const;
 

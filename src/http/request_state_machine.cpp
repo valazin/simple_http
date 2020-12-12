@@ -5,7 +5,7 @@
 
 using namespace http;
 
-// TODO: create a rejected char list for every state and use it while parsing
+// TODO: refactoring: create a rejected char list for every state and use it while parsing
 
 request_state_machine::request_state_machine(uri_handler uri,
                                              header_handler header) :

@@ -12,23 +12,39 @@
 
 #include <cstring>
 
+#include <glog/logging.h>
+
 #include "connection.h"
 #include "client_worker.h"
 
 using namespace http;
 
-client::client() noexcept
+client::client()
+{
+    try {
+        init();
+    } catch (const std::exception& e) {
+        uninit();
+        throw e;
+    }
+}
+
+client::~client()
+{
+    uninit();
+}
+
+void client::init()
 {
     const size_t epoll_num = 1;
     _epolls.reserve(epoll_num);
     for (size_t i=0; i<epoll_num; ++i) {
-        int fd = epoll_create1(0);
+        const int fd = epoll_create1(0);
         if (fd != -1) {
             _epolls.push_back(fd);
         } else {
-            // TODO:
             perror("epoll_create");
-//            return false;
+            throw std::logic_error("coudn't epoll_create");
         }
     }
 
@@ -39,19 +55,37 @@ client::client() noexcept
     }
 }
 
-client::~client()
+void client::uninit() noexcept
 {
-    // TODO: check release resources and memory
+    for (auto worker : _workers) {
+        worker->stop();
+        delete  worker;
+    }
+    _workers.clear();
+
+    for (int epoll : _epolls) {
+        close(epoll);
+    }
+    _epolls.clear();
 }
 
-bool client::send(const request &request,
-                  const std::string &host,
-                  uint16_t port,
-                  const std::string &uri,
-                  const response_handler &handler)
+bool client::send(const request& request, const in_response_handler& handler)
 {
-    struct addrinfo* addrs;
+    // setup socket
+    const int sock_d = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_d == -1) {
+        perror("socket");
+        return false;
+    }
 
+    if (fcntl(sock_d, F_SETFL, O_NONBLOCK) != 0) {
+        close(sock_d);
+        perror("fcntl to NONBLOCK");
+        return false;
+    }
+
+    // connect to remote host
+    struct addrinfo* addrs;
     struct addrinfo hints;
     std::memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
@@ -59,21 +93,18 @@ bool client::send(const request &request,
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = 0;
 
-    int err = getaddrinfo(host.data(), std::to_string(port).data(), &hints, &addrs);
-    if (err != 0) {
+    if (getaddrinfo(request.remote_host.data(),
+                    std::to_string(request.remote_port).data(),
+                    &hints,
+                    &addrs) != 0) {
+        close(sock_d);
         perror("getaddrinfo");
-        return false;
-    }
-
-    int sd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sd == -1) {
-        perror("socket");
         return false;
     }
 
     bool was_connected = false;
     for (struct addrinfo *addr = addrs; addr != nullptr; addr = addr->ai_next) {
-        if (connect(sd, addr->ai_addr, addr->ai_addrlen) == 0) {
+        if (connect(sock_d, addr->ai_addr, addr->ai_addrlen) == 0) {
             was_connected = true;
             break;
         } else {
@@ -84,27 +115,32 @@ bool client::send(const request &request,
     freeaddrinfo(addrs);
 
     if (!was_connected) {
-        close(sd);
-        return false;
-    }
-
-    if (fcntl(sd, F_SETFL, O_NONBLOCK) != 0) {
-        perror("fcntl to NONBLOCK");
+        close(sock_d);
         return false;
     }
 
     connection* conn = new connection;
-    conn->sock_d = sd;
-    conn->resp_handler = handler;
+    conn->sock_d = sock_d;
+    conn->in_resp_handler = handler;
     conn->state = connection_state::write_request;
-    conn->req_reader = std::make_unique<request_reader>(request, host, port, uri);
+    try {
+        conn->req_reader = std::make_unique<request_reader>(request);
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "couldn't alloc request_reader: " << e.what();
+        close(sock_d);
+        delete conn;
+        return false;
+    }
 
     epoll_event in_event;
     in_event.events = EPOLLOUT | EPOLLRDHUP;
     in_event.data.ptr = conn;
 
-    if (epoll_ctl(_epolls.at(_current_epoll_index), EPOLL_CTL_ADD, sd, &in_event) == -1) {
+    if (epoll_ctl(_epolls.at(_current_epoll_index), EPOLL_CTL_ADD, sock_d, &in_event) == -1) {
+        close(sock_d);
+        delete conn;
         perror("epoll_ctl");
+        return false;
     }
 
     ++_current_epoll_index;

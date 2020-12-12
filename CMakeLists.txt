@@ -25,7 +25,7 @@ foreach(_src_dir ${SRC_DIRS})
 endforeach()
 
 add_executable(${APP_NAME} ${SRC})
-#TODO:
+#TODO: refactoring:
 #target_include_directories(${APP_NAME} PRIVATE ${INCLUDE_DIRECTORIES} ${SRC_DIRS})
 
 ###3rd party libraries

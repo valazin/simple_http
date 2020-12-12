@@ -4,38 +4,27 @@
 #include <unistd.h>
 #include <sstream>
 
-#include <glog/logging.h>
-
 #include "../utility/filesystem.h"
 
 using namespace http;
 
-request_reader::request_reader(const request& request,
-                               const std::string &host,
-                               uint16_t port,
-                               const std::string &uri) :
+request_reader::request_reader(const request& request) :
     _req(request)
 {
     if (!_req.body_file_path.empty()) {
         _body_fd = open(_req.body_file_path.data(), O_RDONLY);
         if (_body_fd == -1) {
-            // TODO:
-            LOG(ERROR) << "Couldn't open file: " << _req.body_file_path;
-//            perror("open file to write body");
-//            release_connection(conn);
-//            return;
+            perror("couldn't open file");
+            throw std::logic_error("coudn't open file " + _req.body_file_path);
         }
 
-        ssize_t size = filesystem::file_size(_body_fd);
+        const ssize_t size = filesystem::file_size(_body_fd);
         if (size != -1) {
             _body_size = static_cast<size_t>(size);
         } else {
-            // TODO:
-            LOG(ERROR) << "Couldn't detect file size: " << _req.body_file_path;
-//            perror("get file size");
-//            release_connection(conn);
-//            return;
-
+            close(_body_fd);
+            perror("coudn't get size for file");
+            throw std::logic_error("coudn't get size of file " + _req.body_file_path);
         }
     } else if (!request.body_str.empty()) {
         _body_size = _req.body_str.size();
@@ -44,13 +33,14 @@ request_reader::request_reader(const request& request,
     }
 
     std::stringstream ss;
-    ss << request_method_to_str(_req.method) << " " << uri << " HTTP/1.1\r\n";
-    ss << "Host: " << host << ":" << port << "\r\n";
-    for (auto&& header : _req.headers) {
-        ss << header.first << ": " << header.second << "\r\n";
+    ss << request_method_to_str(_req.method) << " " << _req.uri << " HTTP/1.1\r\n";
+    for (const auto& [key, value] : _req.headers) {
+        ss << key << ": " << value << "\r\n";
     }
+    ss << "Host: " << _req.remote_host << ":" << _req.remote_port << "\r\n";
     if (_body_size > 0) {
         ss << "Content-Length: " << _body_size << "\r\n";
+        // TODO: bug: write content type
     }
     ss << "\r\n";
 
@@ -64,14 +54,19 @@ request_reader::~request_reader()
     }
 }
 
+const request &request_reader::get_request() const
+{
+    return _req;
+}
+
 bool request_reader::has_chunks() const noexcept
 {
     return _state != state::read_none;
 }
 
-request_chunk request_reader::get_chunk() const noexcept
+request_reader::chunk request_reader::get_chunk() const noexcept
 {
-    request_chunk res;
+    chunk res;
 
     switch(_state) {
     case state::read_line:
@@ -130,6 +125,7 @@ void request_reader::next(size_t size) noexcept
     }
 }
 
+// TODO: refactoring: move to utils
 std::string request_reader::request_method_to_str(request_method method) noexcept
 {
     switch (method) {
@@ -142,6 +138,5 @@ std::string request_reader::request_method_to_str(request_method method) noexcep
     case request_method::undefined:
         return "";
     }
-
     return "";
 }

@@ -10,19 +10,20 @@
 
 namespace http {
 
+struct connection;
 class client_worker;
 
 class client
 {
 public:
-    client() noexcept;
+    client();
     ~client();
 
-    bool send(const request& request,
-              const std::string& host,
-              uint16_t port,
-              const std::string& uri,
-              const response_handler& handler);
+    bool send(const request& request, const in_response_handler& handler);
+
+private:
+    void init();
+    void uninit() noexcept;
 
 private:
     std::atomic<size_t> _current_epoll_index = 0;

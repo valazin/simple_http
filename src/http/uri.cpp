@@ -8,8 +8,8 @@ uri::uri() noexcept
 {
 }
 
-// TODO: /path?sta?rt=10&&&: onle one ?
-// TODO: path///?start=10&&&duration=5: must starts with /
+// TODO: bug: /path?sta?rt=10&&&: onle one ?
+// TODO: bug: path///?start=10&&&duration=5: must starts with /
 uri::uri(const char* buff, size_t size) noexcept :
     _buff(buff),
     _size(size)
@@ -77,7 +77,7 @@ std::vector<query> uri::get_query_items() const noexcept
 
 string uri::find_query_item(const char* key) const noexcept
 {
-    for (auto&& item : _query_items) {
+    for (const auto& item : _query_items) {
         if (item.first.compare(key) == 0) {
             return item.second;
         }

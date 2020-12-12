@@ -1,5 +1,5 @@
-#ifndef WORKER_H
-#define WORKER_H
+#ifndef SERVER_WORKER_H
+#define SERVER_WORKER_H
 
 #include <string>
 #include <thread>
@@ -11,13 +11,13 @@ namespace http {
 
 struct connection;
 
-class worker
+class server_worker
 {
 public:
-    worker(int epoll_d) noexcept;
-    ~worker();
+    server_worker(int epoll_d) noexcept;
+    ~server_worker();
 
-    void start() noexcept;
+    void start() ;
     void stop() noexcept;
 
 private:
@@ -27,14 +27,14 @@ private:
     void handle_out(connection* conn) noexcept;
 
     void go_write_response(connection* conn, const response &resp) noexcept;
-    void go_close_connection(connection* conn) noexcept;
+    void go_close_connection(connection* conn, bool res) noexcept;
 
 private:
     int _epoll_d = -1;
-    std::atomic<bool> _isRuning;
+    std::atomic<bool> _is_runing = false;
     std::thread _thread;
 };
 
 }
 
-#endif // WORKER_H
+#endif // SERVER_WORKER_H

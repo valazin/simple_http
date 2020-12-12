@@ -152,9 +152,9 @@ response_state_machine::handle_read_status(const char *buff, size_t size) noexce
 }
 
 std::tuple<bool, int>
-response_state_machine::handle_read_status_description(const char *buff, size_t size) noexcept
+response_state_machine::handle_read_status_description(const char*, size_t) noexcept
 {
-    // TODO: add description to response
+    // TODO: feature: add description to response
     return {true, 0};
 }
 
@@ -173,9 +173,7 @@ response_state_machine::handle_read_headers(const char *buff, size_t size) noexc
         }
     } else {
         if (!key.empty()) {
-            // TODO:
-//            _response->headers.insert({std::string(key.data(), key.size()),
-//                                      std::string(value.data(), value.size())});
+            _response->headers.insert({std::string(key.data(), key.size()), std::string(value.data(), value.size())});
             return {true, 0};
         } else {
             return {false, 400};

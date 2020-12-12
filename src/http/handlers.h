@@ -10,10 +10,11 @@
 
 namespace http {
 
-typedef std::function<response(std::shared_ptr<request>)> request_handler;
-typedef std::function<void(std::shared_ptr<response>)> response_handler;
+typedef std::function<response(std::shared_ptr<request>)> in_request_handler;
 typedef std::function<int(std::shared_ptr<request>, uri)> uri_handler;
 typedef std::function<int(std::shared_ptr<request>, string, string)> header_handler;
+
+typedef std::function<void(std::shared_ptr<response>)> in_response_handler;
 
 }
 

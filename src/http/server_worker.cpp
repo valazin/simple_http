@@ -1,57 +1,58 @@
-#include "worker.h"
-
-#include <cassert>
+#include "server_worker.h"
 
 #include <sys/epoll.h>
 #include <sys/sendfile.h>
+
+#include <cassert>
+
 #include <glog/logging.h>
 
 #include "connection.h"
 
 using namespace http;
 
-// TODO: 408 Request Timeout
+// TODO: feature: 408 Request Timeout
 
-worker::worker(int epoll_d) noexcept :
+server_worker::server_worker(int epoll_d) noexcept :
     _epoll_d(epoll_d)
 {
-    _isRuning.store(false);
 }
 
-worker::~worker()
+server_worker::~server_worker()
 {
     stop();
 }
 
-void worker::start() noexcept
+void server_worker::start()
 {
-    LOG(INFO) << "Listen " << _epoll_d;
-    _isRuning.store(true);
-    _thread = std::thread(&worker::loop, this);
+    _is_runing.store(true);
+    _thread = std::thread(&server_worker::loop, this);
+    LOG(INFO) << "server worker has been started with epoll " << _epoll_d;
 }
 
-void worker::stop() noexcept
+void server_worker::stop() noexcept
 {
-    _isRuning.store(true);
+    _is_runing.store(true);
     if (_thread.joinable()) {
         _thread.join();
     }
 }
 
-void worker::loop() noexcept
+void server_worker::loop() noexcept
 {
-    const int timeout_msecs = 30000;
+    const int events_timeout_msecs = 30000;
     const size_t max_events = 1000;
     epoll_event events[max_events];
 
-    while (_isRuning) {
-        int num_conns = epoll_wait(_epoll_d, events, max_events, timeout_msecs);
+    while (_is_runing) {
+        int num_conns = epoll_wait(_epoll_d, events, max_events, events_timeout_msecs);
         for (int i = 0; i < num_conns; ++i) {
             const epoll_event& event = events[i];
             connection* conn = reinterpret_cast<connection*>(event.data.ptr);
-            if (event.events&EPOLLRDHUP) {
-                go_close_connection(conn);
-            } else if (event.events&EPOLLIN) {
+            if (event.events & EPOLLRDHUP) {
+                LOG(WARNING) << "connection closed by peer";
+                go_close_connection(conn, false);
+            } else if (event.events & EPOLLIN) {
                 handle_in(conn);
                 if (conn->state == connection_state::write_response) {
                     epoll_event event;
@@ -59,10 +60,10 @@ void worker::loop() noexcept
                     event.data.ptr = conn;
                     if (epoll_ctl(_epoll_d, EPOLL_CTL_MOD, conn->sock_d, &event) == -1) {
                         perror("epoll_ctl mod");
-                        go_close_connection(conn);
+                        go_close_connection(conn, false);
                     }
                 }
-            } else if (event.events&EPOLLOUT) {
+            } else if (event.events & EPOLLOUT) {
                 handle_out(conn);
             } else {
                 assert(false);
@@ -71,13 +72,14 @@ void worker::loop() noexcept
     }
 }
 
-void worker::handle_in(connection *conn) noexcept
+void server_worker::handle_in(connection *conn) noexcept
 {
+    assert(conn->state == connection_state::read_request);
     if (conn->state != connection_state::read_request) {
-        LOG(WARNING) << "try handle in but it's incorect state";
+        LOG(WARNING) << "try handle_in but it's incorect state " << static_cast<int>(conn->state);
     }
 
-    auto&& req_state_machine = conn->req_state_machine;
+    auto& req_state_machine = conn->req_state_machine;
 
     while (req_state_machine->get_state() == request_state_machine::state::processing) {
         auto [buff, size] = req_state_machine->prepare_buff();
@@ -108,23 +110,26 @@ void worker::handle_in(connection *conn) noexcept
         break;
     }
     case request_state_machine::state::accpeted: {
-        response resp = conn->req_handler(req_state_machine->get_request());
+        std::shared_ptr<request> req = req_state_machine->get_request();
+        req->remote_port = conn->remote_port;
+        req->remote_host = conn->remote_host;
+        const response resp = conn->in_req_handler(req);
         go_write_response(conn, resp);
         break;
     }
     }
 }
 
-void worker::handle_out(connection *conn) noexcept
+void server_worker::handle_out(connection *conn) noexcept
 {
     if (conn->state != connection_state::write_response) {
         LOG(WARNING) << "try handle out but it's incorect state";
     }
 
-    auto&& resp_reader = conn->resp_reader;
+    auto& resp_reader = conn->resp_reader;
 
     while (resp_reader->has_chunks()) {
-        response_chunk chunk = resp_reader->get_chunk();
+        response_reader::chunk chunk = resp_reader->get_chunk();
 
         ssize_t written = -1;
         if (chunk.buff != nullptr) {
@@ -141,24 +146,35 @@ void worker::handle_out(connection *conn) noexcept
             break;
         } else {
             perror("write response");
-            go_close_connection(conn);
+            go_close_connection(conn, false);
             return;
         }
     }
 
     if (!resp_reader->has_chunks()) {
-        go_close_connection(conn);
+        go_close_connection(conn, true);
     }
 }
 
-void worker::go_write_response(connection *conn, const response& resp) noexcept
+void server_worker::go_write_response(connection *conn, const response& resp) noexcept
 {
-    conn->resp_reader = std::make_unique<response_reader>(resp);
+    try {
+        conn->resp_reader = std::make_unique<response_reader>(resp);
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "couldn't alloc response_reader: " << e.what();
+        conn->resp_reader = std::make_unique<response_reader>();
+    }
     conn->state = connection_state::write_response;
 }
 
-void worker::go_close_connection(connection *conn) noexcept
+void server_worker::go_close_connection(connection* conn, bool res) noexcept
 {
+    if (conn->state == connection_state::write_response && conn->resp_reader) {
+        const response& resp = conn->resp_reader->get_response();
+        if (resp.callback) {
+            resp.callback(res);
+        }
+    }
     close(conn->sock_d);
     delete conn;
 }

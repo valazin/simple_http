@@ -15,7 +15,7 @@
 
 namespace http {
 
-class worker;
+class server_worker;
 
 class server
 {
@@ -25,7 +25,7 @@ public:
 
     bool start(const std::string& host,
                uint16_t port,
-               request_handler request_handl,
+               in_request_handler request_handl,
                uri_handler uri_hand,
                header_handler header_handl) noexcept;
     void stop() noexcept;
@@ -36,14 +36,14 @@ private:
     void loop() noexcept;
 
 private:
-    int _sd = -1;
+    int _listening_sock_d = -1;
     std::vector<int> _epolls;
-    std::vector<worker*> _workers;
+    std::vector<server_worker*> _workers;
 
     std::atomic<bool> _isRunning;
     std::thread _thread;
 
-    request_handler _request_handler;
+    in_request_handler _request_handler;
     uri_handler _uri_handler;
     header_handler _header_handler;
 };

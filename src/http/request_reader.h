@@ -5,27 +5,26 @@
 
 namespace http {
 
-struct request_chunk
-{
-    const char* buff = nullptr;
-
-    int file_d = -1;
-    off_t file_offset = 0;
-
-    size_t size = 0;
-};
-
 class request_reader
 {
 public:
-    explicit request_reader(const request& request,
-                            const std::string &host,
-                            uint16_t port,
-                            const std::string& uri);
+    struct chunk
+    {
+        const char* buff = nullptr;
+
+        int file_d = -1;
+        off_t file_offset = 0;
+
+        size_t size = 0;
+    };
+
+    explicit request_reader(const request& request);
     ~request_reader();
 
+    const request& get_request() const;
+
     bool has_chunks() const noexcept;
-    request_chunk get_chunk() const noexcept;
+    chunk get_chunk() const noexcept;
     void next(size_t size) noexcept;
 
 private:

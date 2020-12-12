@@ -23,15 +23,19 @@ enum class connection_state
 struct connection
 {
     int sock_d = 0;
+    
+    uint16_t remote_port = 0;
+    std::string remote_host;
+
     connection_state state = connection_state::read_request;
 
-    std::unique_ptr<request_state_machine> req_state_machine;
-    request_handler req_handler = nullptr;
     std::unique_ptr<response_reader> resp_reader;
+    std::unique_ptr<request_state_machine> req_state_machine;
+    in_request_handler in_req_handler = nullptr;
 
     std::unique_ptr<request_reader> req_reader;
     std::unique_ptr<response_state_machine> resp_state_machine;
-    response_handler resp_handler = nullptr;
+    in_response_handler in_resp_handler = nullptr;
 };
 
 }

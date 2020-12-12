@@ -5,30 +5,29 @@
 
 namespace http {
 
-struct response_chunk
-{
-    const char* buff = nullptr;
-
-    int file_d = -1;
-    off_t file_offset = 0;
-
-    size_t size = 0;
-};
-
 class response_reader
 {
 public:
+    struct chunk
+    {
+        const char* buff = nullptr;
+
+        int file_d = -1;
+        off_t file_offset = 0;
+
+        size_t size = 0;
+    };
+
+    // Response with 500 status code. Use if another construtor thrown an exception
+    explicit response_reader() noexcept;
     explicit response_reader(const response& resp);
     ~response_reader();
 
-    int resp_code() const noexcept;
+    const response& get_response() const;
 
     bool has_chunks() const noexcept;
-    response_chunk get_chunk() const noexcept;
+    chunk get_chunk() const noexcept;
     void next(size_t size) noexcept;
-
-private:
-    inline static std::string status_code_to_str(int code) noexcept;
 
 private:
     enum class state
@@ -41,9 +40,12 @@ private:
     };
 
 private:
-    response _resp;
+    inline static std::string status_code_to_str(int code) noexcept;
 
-    std::string _line;
+private:
+    const response _resp = response(500);
+
+    std::string _line = "HTTP/1.1 500 Internal Error \r\n\r\n";
     size_t _line_written_size = 0;
 
     int _body_fd = -1;

@@ -6,27 +6,29 @@
 
 #include "../utility/filesystem.h"
 
-http::response_reader::response_reader(const response &resp) :
+using namespace http;
+
+response_reader::response_reader() noexcept
+{
+}
+
+response_reader::response_reader(const response& resp) :
     _resp(resp)
 {
     if (!_resp.body_file_path.empty()) {
         _body_fd = open(_resp.body_file_path.data(), O_RDONLY);
         if (_body_fd == -1) {
-            // TODO:
-//            perror("open file to write body");
-//            release_connection(conn);
-//            return;
+            perror("couldn't open file");
+            throw std::logic_error("coudn't open file " + _resp.body_file_path);
         }
 
-        ssize_t size = filesystem::file_size(_body_fd);
+        const ssize_t size = filesystem::file_size(_body_fd);
         if (size != -1) {
             _body_size = static_cast<size_t>(size);
         } else {
-            // TODO:
-//            perror("get file size");
-//            release_connection(conn);
-//            return;
-
+            close(_body_fd);
+            perror("coudn't get size of file");
+            throw std::logic_error("coudn't get size of file " + _resp.body_file_path);
         }
     } else if (!_resp.body_str.empty()) {
         _body_size = _resp.body_str.size();
@@ -36,9 +38,14 @@ http::response_reader::response_reader(const response &resp) :
 
     std::stringstream ss;
     ss << "HTTP/1.1 " << _resp.code << " " << status_code_to_str(_resp.code) << "\r\n";
+    for (const auto& [key, value] : _resp.headers) {
+        ss << key << ": " << value << "\r\n";
+    }
+    // TODO: refactoring: move to headers
     ss << "Access-Control-Allow-Origin: *" << "\r\n";
     if (_body_size > 0) {
         ss << "Content-Length: " << _body_size << "\r\n";
+        // TODO: refactoring: use string and create method to common content types
         switch(_resp.content_type) {
         case content_types::none:
             break;
@@ -61,26 +68,26 @@ http::response_reader::response_reader(const response &resp) :
     _line = ss.str();
 }
 
-http::response_reader::~response_reader()
+response_reader::~response_reader()
 {
     if (_body_fd != -1) {
         close(_body_fd);
     }
 }
 
-int http::response_reader::resp_code() const noexcept
+const response &response_reader::get_response() const
 {
-    return _resp.code;
+    return _resp;
 }
 
-bool http::response_reader::has_chunks() const noexcept
+bool response_reader::has_chunks() const noexcept
 {
     return _state != state::read_none;
 }
 
-http::response_chunk http::response_reader::get_chunk() const noexcept
+response_reader::chunk response_reader::get_chunk() const noexcept
 {
-    response_chunk res;
+    chunk res;
 
     switch(_state) {
     case state::read_line:
@@ -109,7 +116,7 @@ http::response_chunk http::response_reader::get_chunk() const noexcept
     return res;
 }
 
-void http::response_reader::next(size_t size) noexcept
+void response_reader::next(size_t size) noexcept
 {
     switch(_state) {
     case state::read_line:
@@ -139,8 +146,8 @@ void http::response_reader::next(size_t size) noexcept
     }
 }
 
-// TODO: move to http::statues enum
-std::string http::response_reader::status_code_to_str(int code) noexcept
+// TODO: refactoring: move to utils
+std::string response_reader::status_code_to_str(int code) noexcept
 {
     switch (code) {
     case 200:
