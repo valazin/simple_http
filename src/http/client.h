@@ -19,7 +19,7 @@ public:
     client();
     ~client();
 
-    bool send(const request& request, const in_response_handler& handler);
+    void send(const request& request, const in_response_handler& handler);
 
 private:
     void init();

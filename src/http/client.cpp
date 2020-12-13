@@ -36,6 +36,9 @@ client::~client()
 
 void client::init()
 {
+    // TODO: refactoring: move managing of epoll to worker and
+    // create and use method worker::add_connection(connection* conn)
+
     const size_t epoll_num = 1;
     _epolls.reserve(epoll_num);
     for (size_t i=0; i<epoll_num; ++i) {
@@ -69,22 +72,15 @@ void client::uninit() noexcept
     _epolls.clear();
 }
 
-bool client::send(const request& request, const in_response_handler& handler)
+void client::send(const request& request, const in_response_handler& handler)
 {
-    // setup socket
     const int sock_d = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_d == -1) {
         perror("socket");
-        return false;
+        handler(nullptr);
+        return;
     }
 
-    if (fcntl(sock_d, F_SETFL, O_NONBLOCK) != 0) {
-        close(sock_d);
-        perror("fcntl to NONBLOCK");
-        return false;
-    }
-
-    // connect to remote host
     struct addrinfo* addrs;
     struct addrinfo hints;
     std::memset(&hints, 0, sizeof(struct addrinfo));
@@ -99,7 +95,8 @@ bool client::send(const request& request, const in_response_handler& handler)
                     &addrs) != 0) {
         close(sock_d);
         perror("getaddrinfo");
-        return false;
+        handler(nullptr);
+        return;
     }
 
     bool was_connected = false;
@@ -116,7 +113,15 @@ bool client::send(const request& request, const in_response_handler& handler)
 
     if (!was_connected) {
         close(sock_d);
-        return false;
+        handler(nullptr);
+        return;
+    }
+
+    if (fcntl(sock_d, F_SETFL, O_NONBLOCK) != 0) {
+        close(sock_d);
+        perror("fcntl to NONBLOCK");
+        handler(nullptr);
+        return;
     }
 
     connection* conn = new connection;
@@ -129,24 +134,26 @@ bool client::send(const request& request, const in_response_handler& handler)
         LOG(ERROR) << "couldn't alloc request_reader: " << e.what();
         close(sock_d);
         delete conn;
-        return false;
+        handler(nullptr);
+        return;
     }
 
+    // setup epoll
+    // TODO: refactoring: move managing of epoll to worker and
+    // create and use worker::add_connection(connection* conn)
     epoll_event in_event;
     in_event.events = EPOLLOUT | EPOLLRDHUP;
     in_event.data.ptr = conn;
-
     if (epoll_ctl(_epolls.at(_current_epoll_index), EPOLL_CTL_ADD, sock_d, &in_event) == -1) {
         close(sock_d);
         delete conn;
         perror("epoll_ctl");
-        return false;
+        handler(nullptr);
+        return;
     }
 
     ++_current_epoll_index;
     if (_current_epoll_index >= _epolls.size()) {
         _current_epoll_index = 0;
     }
-
-    return true;
 }
